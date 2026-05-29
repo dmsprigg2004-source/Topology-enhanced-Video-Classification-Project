@@ -10,7 +10,8 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropout, BatchNormalization, Input
 
 
-num_frames = 16
+num_frames = 8
+resolution = 56
 num_classes = 101
 
 def main():
@@ -28,8 +29,8 @@ def main():
     video_frames, video_frames_val, encoded_labels, encoded_labels_val = train_test_split(
         video_frames, encoded_labels, test_size=0.1765, random_state=42)
     
-    # Create input shape with 16 frames, 112x112 pixels and 3 channels
-    input_shape = (num_frames, 112, 112, 3)
+    # Create input shape with a specified frame/pixel count and 3 channels
+    input_shape = (num_frames, resolution, resolution, 3)
 
     # Call helper function to create model
     model = create_3dCNN_model(input_shape, num_classes)
@@ -70,18 +71,18 @@ def extract_frames(path, num_frames):
         if not ret:
             break
         
-        # Resize frame to 112x112 pixels
-        frame = cv2.resize(frame, (112, 112))
+        # Resize frame to specifed size
+        frame = cv2.resize(frame, (resolution, resolution))
 
         # Add frame to frames list
         frames.append(frame)
 
-        # Close video file
-        capture.release()
+    # Close video file
+    capture.release()
 
-        # Fill in missing frames with blank frames
-        while len(frames) < num_frames:
-            frames.append(np.zeros((112, 112, 3), np.uint8))
+    # Fill in missing frames with blank frames
+    while len(frames) < num_frames:
+        frames.append(np.zeros((resolution, resolution, 3), np.uint8))
 
     # Return array of frames
     return np.array(frames)
@@ -135,21 +136,21 @@ def create_3dCNN_model(input_shape, num_classes):
     model.add(Input(input_shape))
 
     # Adding a 3D convolutional layer containing 64 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(64, (3, 3, 3), activation='relu', padding='same'))
+    model.add(Conv3D(32, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
     model.add(BatchNormalization())
 
     # Adding a 3D convolutional layer containing 128 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(128, (3, 3, 3), activation='relu', padding='same'))
+    model.add(Conv3D(64, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
     model.add(BatchNormalization())
 
     # Adding a 3D convolutional layer containing 256 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(256, (3, 3, 3), activation='relu', padding='same'))
+    model.add(Conv3D(128, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
