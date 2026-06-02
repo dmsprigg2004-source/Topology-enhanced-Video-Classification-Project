@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropout, BatchNormalization, Input
-
+from sklearn.metrics import classification_report
 
 num_frames = 8
 resolution = 56
@@ -22,12 +22,12 @@ def main():
     # Load all video data
     video_frames, encoded_labels = load_data(path, num_classes, num_frames)
 
-    # Split video data giving 70% for training, 15% for testing, and 15% for validation
+    # Split video data giving 70% for training, 20% for testing, and 10% for validation
     video_frames, video_frames_test, encoded_labels, encoded_labels_test = train_test_split(
-        video_frames, encoded_labels, test_size=0.15, random_state=42)
+        video_frames, encoded_labels, test_size=0.2, random_state=42)
     
     video_frames, video_frames_val, encoded_labels, encoded_labels_val = train_test_split(
-        video_frames, encoded_labels, test_size=0.1765, random_state=42)
+        video_frames, encoded_labels, test_size=0.125, random_state=42)
     
     # Create input shape with a specified frame/pixel count and 3 channels
     input_shape = (num_frames, resolution, resolution, 3)
@@ -36,14 +36,13 @@ def main():
     model = create_3dCNN_model(input_shape, num_classes)
 
     # Train the model using training and validation data
-    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), epochs=10, batch_size=8)
+    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), epochs=1, batch_size=8)
 
     # Evaluate the models performance using the testing data
     loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
 
     # Print the accuracy of the model
     print(f'Test Accuracy: {accuracy:.2f}')
-
 
 # Function made to extract 16 frames from a video file
 def extract_frames(path, num_frames):
