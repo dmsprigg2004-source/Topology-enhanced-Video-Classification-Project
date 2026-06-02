@@ -20,7 +20,7 @@ def main():
     path = Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
 
     # Load all video data
-    video_frames, encoded_labels, class_names = load_data(path, num_classes, num_frames)######
+    video_frames, encoded_labels, class_names = load_data(path, num_classes, num_frames)
 
     # Split video data giving 70% for training, 20% for testing, and 10% for validation
     video_frames, video_frames_test, encoded_labels, encoded_labels_test = train_test_split(
@@ -44,15 +44,17 @@ def main():
     # Print the accuracy of the model
     print(f'Test Accuracy: {accuracy:.2f}')
 
-    ### 
+    # Obtain predictions from the model using testing data
     encoded_predict = model.predict(video_frames_test)
 
+    # Convert predicted classes and true classes to class labels
     encoded_pred_classes = np.argmax(encoded_predict, axis=1)
-
     encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
 
+    # Create a classification report
     class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
 
+    # Print report
     print(class_report)
 
 # Function made to extract 16 frames from a video file
@@ -130,12 +132,14 @@ def load_data(path_dir, num_classes, num_frames):
     # Make video_frames list an array
     video_frames = np.array(video_frames)
 
-    # Convert labels to one-hot encoded format suitable for ML
-    codes, class_names = pd.factorize(np.array(labels))######
+    # Get label codes and class names
+    codes, class_names = pd.factorize(np.array(labels))
+
+    # Convert labels into one-hot encoded format
     encoded_labels = to_categorical(codes, num_classes)
 
-    # Return array of video frames and encoded labels
-    return video_frames, encoded_labels, class_names###########
+    # Return video frames, encoded labels and class names
+    return video_frames, encoded_labels, class_names
 
 # Function that builds a 3D CNN video classification model
 def create_3dCNN_model(input_shape, num_classes):
