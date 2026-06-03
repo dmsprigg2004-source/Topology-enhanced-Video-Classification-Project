@@ -1,3 +1,5 @@
+# This code will be a topologically enhanced video classification model
+
 from pathlib import Path
 import cv2
 import numpy as np
@@ -10,8 +12,14 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropout, BatchNormalization, Input
 from sklearn.metrics import classification_report
 
+# Define global variables
 num_frames = 8
 resolution = 56
+num_epochs = 10
+layer_1_filters = 32
+layer_2_filters = 64
+layer_3_filters = 128
+
 num_classes = 101
 
 def main():
@@ -36,7 +44,8 @@ def main():
     model = create_3dCNN_model(input_shape, num_classes)
 
     # Train the model using training and validation data
-    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), epochs=1, batch_size=8)
+    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
+                        epochs=num_epochs, batch_size=8)
 
     # Evaluate the models performance using the testing data
     loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
@@ -150,22 +159,25 @@ def create_3dCNN_model(input_shape, num_classes):
     # Add input shape to model
     model.add(Input(input_shape))
 
-    # Adding a 3D convolutional layer containing 64 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(32, (3, 3, 3), activation='relu', padding='same'))
+    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
+    # and relu activation
+    model.add(Conv3D(layer_1_filters, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
     model.add(BatchNormalization())
 
-    # Adding a 3D convolutional layer containing 128 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(64, (3, 3, 3), activation='relu', padding='same'))
+    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
+    # and relu activation
+    model.add(Conv3D(layer_2_filters, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
     model.add(BatchNormalization())
 
-    # Adding a 3D convolutional layer containing 256 filters, a kernel size of (3,3,3) and relu activation
-    model.add(Conv3D(128, (3, 3, 3), activation='relu', padding='same'))
+    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
+    # and relu activation
+    model.add(Conv3D(layer_3_filters, (3, 3, 3), activation='relu', padding='same'))
     # Adding a 3D max pooling layer with a pool size of (2,2,2)
     model.add(MaxPooling3D((2, 2, 2)))
     # Adding a batch normalization layer
