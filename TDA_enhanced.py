@@ -11,6 +11,8 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropout, BatchNormalization, Input
 from sklearn.metrics import classification_report
+from gtda.images import ImageToPointCloud
+import gudhi as gd
 
 # Define global variables
 num_frames = 8
@@ -40,33 +42,39 @@ def main():
     # Create input shape with a specified frame/pixel count and 3 channels
     input_shape = (num_frames, resolution, resolution, 3)
 
+    # Call helper function to generate point clouds for the data
+    point_clouds = generate_point_clouds(video_frames)
+
+    # Call helper function to generate persistence diagrams for the data
+    persistence_diagrams = generate_persistence_diagrams(point_clouds)
+
     # Call helper function to create model
-    model = create_3dCNN_model(input_shape, num_classes)
+    # model = create_3dCNN_model(input_shape, num_classes)
 
-    # Train the model using training and validation data
-    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
-                        epochs=num_epochs, batch_size=8)
+    # # Train the model using training and validation data
+    # history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
+    #                     epochs=num_epochs, batch_size=8)
 
-    # Evaluate the models performance using the testing data
-    loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
+    # # Evaluate the models performance using the testing data
+    # loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
 
-    # Print the accuracy of the model
-    print(f'Test Accuracy: {accuracy:.2f}')
+    # # Print the accuracy of the model
+    # print(f'Test Accuracy: {accuracy:.2f}')
 
-    # Obtain predictions from the model using testing data
-    encoded_predict = model.predict(video_frames_test)
+    # # Obtain predictions from the model using testing data
+    # encoded_predict = model.predict(video_frames_test)
 
-    # Convert predicted classes and true classes to class labels
-    encoded_pred_classes = np.argmax(encoded_predict, axis=1)
-    encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
+    # # Convert predicted classes and true classes to class labels
+    # encoded_pred_classes = np.argmax(encoded_predict, axis=1)
+    # encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
 
-    # Create a classification report
-    class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
+    # # Create a classification report
+    # class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
 
-    # Print report
-    print(class_report)
+    # # Print report
+    # print(class_report)
 
-# Function made to extract 16 frames from a video file
+# Function made to extract a specified number of frames from a video file
 def extract_frames(path, num_frames):
 
     # Open specified video file and initialize a list of frames
@@ -115,8 +123,12 @@ def load_data(path_dir, num_classes, num_frames):
     video_frames = []
     labels = []
 
+    x = 0 # Only here while testing
+
     # Loop through video categories
     for category in tqdm(os.listdir(path_dir)):
+
+        x += 1 # Only here while testing
 
         # Define path to given category
         category_path = os.path.join(path_dir, category)
@@ -137,6 +149,9 @@ def load_data(path_dir, num_classes, num_frames):
 
                 # Append category name to labels
                 labels.append(category)
+
+        if x > 0: # Only here while testing
+            break
 
     # Make video_frames list an array
     video_frames = np.array(video_frames)
@@ -197,6 +212,58 @@ def create_3dCNN_model(input_shape, num_classes):
     
     # Return model
     return model
+
+# Function that generates point clouds from the data
+def generate_point_clouds(video_frames):
+
+    # Create object for ImageToPointCloud class
+    itpc = ImageToPointCloud()
+
+    # Initalize list of binary frames
+    binary_frames = []
+
+    # Create nested for loop to access individual frames
+    for video in video_frames:
+        for frame in video:
+            
+            # Convert frame to greyscale form
+            gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Convert greyscale image to binary image
+            ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+
+            # Append binary image to list
+            binary_frames.append(binary_image)
+
+    # Convert list to array
+    binary_frames_arr = np.array(binary_frames)
+
+    # Generate point clouds from binary frames
+    point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
+
+    # Return point clouds
+    return point_clouds
+
+# Function that generates persistence diagrams from point clouds
+def generate_persistence_diagrams(point_clouds):
+
+    # Initialize list of persistence diagrams
+    persistence_diagrams = []
+    
+    # Loop through each point cloud in the input
+    for point_cloud in point_clouds:
+
+        # Create a simplex tree from point cloud
+        simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
+
+        # Create persistence diagram from simplex tree
+        persistence_diagram = simplex_tree.persistence()
+
+        # Append persistence diagram to list
+        persistence_diagrams.append(persistence_diagram)
+
+    # Return list of persistence diagrams
+    return persistence_diagrams
 
 if __name__ == "__main__":
     main()
