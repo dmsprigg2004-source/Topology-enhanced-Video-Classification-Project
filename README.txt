@@ -1,7 +1,11 @@
 Research project: Topology-enhanced Video Classification
 
-So far I have implemented a baseline video classification model using a publically available 
-guide found at: https://www.geeksforgeeks.org/deep-learning/video-classification-with-a-3d-convolutional-neural-network/
+baseline.py:
 
-This baseline implementation is in baseline.py. The TDA_enhanced.py file is a copy of this that will be used to test 
-topology-enhanced video classification.
+baseline.py includes a baseline video classification model that will be used to test against topology-enhanced models.
+
+TDA_enhanced.py:
+
+TDA_enhanced.py copies the baseline video classification model and will implement topological representations of data to
+enhance the model. At this stage in the project I have implemented code to extract topological features from the data
+but have not yet designed strategies to combine these with deep neural features to enhance the model.

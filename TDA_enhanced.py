@@ -1,5 +1,3 @@
-# This code will be a topologically enhanced video classification model
-
 from pathlib import Path
 import cv2
 import numpy as np
@@ -317,6 +315,7 @@ def generate_persistence_images(simplex_trees):
     # print("Min death:", np.min(death_list))
     # print("95th percentile death:", np.percentile(death_list, 95))
 
+    # Return persistence images
     return persistence_images
 
 if __name__ == "__main__":
