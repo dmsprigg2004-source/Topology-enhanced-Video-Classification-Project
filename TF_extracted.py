@@ -290,32 +290,6 @@ def generate_persistence_images(simplex_trees):
         # Append image to list
         persistence_images.append(persitence_image)
 
-    # This commented out code was used to determine proper range values to use within gd.representations.PersistenceImage().
-    # It gathers birth and death values from the inputted data, which I then used to justify the range shown above.
-
-    # birth_list = []
-    # death_list = []
-
-    # for tree in tqdm(simplex_trees):
-    #     for values in tree.persistence_intervals_in_dimension(1):
-    #         birth_list.append(values[0])
-    #         death_list.append(values[1])
-
-    # death_list.sort()
-    # birth_list.sort()
-
-    # print("Mean birth:", np.mean(birth_list))
-    # print("Median birth:", np.median(birth_list))
-    # print("Max birth:", np.max(birth_list))
-    # print("Min birth:", np.min(birth_list))
-    # print("95th percentile birth:", np.percentile(birth_list, 95))
-
-    # print("Mean death:", np.mean(death_list))
-    # print("Median death:", np.median(death_list))
-    # print("Max death:", np.max(death_list))
-    # print("Min death:", np.min(death_list))
-    # print("95th percentile death:", np.percentile(death_list, 95))
-
     # Return persistence images
     return persistence_images
 
