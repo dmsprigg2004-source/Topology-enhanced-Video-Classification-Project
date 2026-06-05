@@ -1,3 +1,6 @@
+# This is the baseline model with topolocial features extracted from the data. Any model that uses TDA to 
+# enhance said model will start from here.
+
 from pathlib import Path
 import cv2
 import numpy as np
@@ -23,6 +26,8 @@ layer_2_filters = 64
 layer_3_filters = 128
 
 num_classes = 101
+
+test_mode = False
 
 def main():
 
@@ -52,30 +57,30 @@ def main():
     persistence_images = generate_persistence_images(simplex_trees)
 
     # Call helper function to create model
-    # model = create_3dCNN_model(input_shape, num_classes)
+    model = create_3dCNN_model(input_shape, num_classes)
 
-    # # Train the model using training and validation data
-    # history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
-    #                     epochs=num_epochs, batch_size=8)
+    # Train the model using training and validation data
+    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
+                        epochs=num_epochs, batch_size=8)
 
-    # # Evaluate the models performance using the testing data
-    # loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
+    # Evaluate the models performance using the testing data
+    loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
 
-    # # Print the accuracy of the model
-    # print(f'Test Accuracy: {accuracy:.2f}')
+    # Print the accuracy of the model
+    print(f'Test Accuracy: {accuracy:.2f}')
 
-    # # Obtain predictions from the model using testing data
-    # encoded_predict = model.predict(video_frames_test)
+    # Obtain predictions from the model using testing data
+    encoded_predict = model.predict(video_frames_test)
 
-    # # Convert predicted classes and true classes to class labels
-    # encoded_pred_classes = np.argmax(encoded_predict, axis=1)
-    # encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
+    # Convert predicted classes and true classes to class labels
+    encoded_pred_classes = np.argmax(encoded_predict, axis=1)
+    encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
 
-    # # Create a classification report
-    # class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
+    # Create a classification report
+    class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
 
-    # # Print report
-    # print(class_report)
+    # Print report
+    print(class_report)
 
 # Function made to extract a specified number of frames from a video file
 def extract_frames(path, num_frames):
@@ -126,12 +131,8 @@ def load_data(path_dir, num_classes, num_frames):
     video_frames = []
     labels = []
 
-    x = 0 # Only here while testing
-
     # Loop through video categories
     for category in tqdm(os.listdir(path_dir)):
-
-        x += 1 # Only here while testing
 
         # Define path to given category
         category_path = os.path.join(path_dir, category)
@@ -153,7 +154,7 @@ def load_data(path_dir, num_classes, num_frames):
                 # Append category name to labels
                 labels.append(category)
 
-        if x > 0: # Only here while testing
+        if test_mode == True: # Only here while testing
             break
 
     # Make video_frames list an array
