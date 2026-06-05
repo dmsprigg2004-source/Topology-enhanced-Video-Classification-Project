@@ -13,6 +13,8 @@ from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropou
 from sklearn.metrics import classification_report
 from gtda.images import ImageToPointCloud
 import gudhi as gd
+import gudhi.representations
+import matplotlib.pyplot as plt
 
 # Define global variables
 num_frames = 8
@@ -45,8 +47,11 @@ def main():
     # Call helper function to generate point clouds for the data
     point_clouds = generate_point_clouds(video_frames)
 
-    # Call helper function to generate persistence diagrams for the data
-    persistence_diagrams = generate_persistence_diagrams(point_clouds)
+    # Call helper function to generate simplex trees and persistence diagrams for the data
+    simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+
+    # Call helper function to generate persistence images for the data
+    persistence_images = generate_persistence_images(simplex_trees)
 
     # Call helper function to create model
     # model = create_3dCNN_model(input_shape, num_classes)
@@ -244,11 +249,12 @@ def generate_point_clouds(video_frames):
     # Return point clouds
     return point_clouds
 
-# Function that generates persistence diagrams from point clouds
-def generate_persistence_diagrams(point_clouds):
+# Function that generates persistence diagrams and simplex trees from point clouds
+def generate_pds_sts(point_clouds):
 
-    # Initialize list of persistence diagrams
+    # Initialize lists of persistence diagrams and simplex trees
     persistence_diagrams = []
+    simplex_trees = []
     
     # Loop through each point cloud in the input
     for point_cloud in point_clouds:
@@ -262,8 +268,56 @@ def generate_persistence_diagrams(point_clouds):
         # Append persistence diagram to list
         persistence_diagrams.append(persistence_diagram)
 
-    # Return list of persistence diagrams
-    return persistence_diagrams
+        # Append simplex tree to list
+        simplex_trees.append(simplex_tree)
+
+    # Return lists
+    return simplex_trees, persistence_diagrams
+
+# Function that generates persistence images from the data
+def generate_persistence_images(simplex_trees):
+
+    # Initalize list of persistence images
+    persistence_images = []
+
+    # Loop through unputted simplex trees
+    for tree in simplex_trees:
+
+        # Create persistence image
+        persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
+                                         im_range=[0,1.5,0,1.5], resolution=[100,100])
+        persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
+
+        # Append image to list
+        persistence_images.append(persitence_image)
+
+    # This commented out code was used to determine proper range values to use within gd.representations.PersistenceImage().
+    # It gathers birth and death values from the inputted data, which I then used to justify the range shown above.
+
+    # birth_list = []
+    # death_list = []
+
+    # for tree in tqdm(simplex_trees):
+    #     for values in tree.persistence_intervals_in_dimension(1):
+    #         birth_list.append(values[0])
+    #         death_list.append(values[1])
+
+    # death_list.sort()
+    # birth_list.sort()
+
+    # print("Mean birth:", np.mean(birth_list))
+    # print("Median birth:", np.median(birth_list))
+    # print("Max birth:", np.max(birth_list))
+    # print("Min birth:", np.min(birth_list))
+    # print("95th percentile birth:", np.percentile(birth_list, 95))
+
+    # print("Mean death:", np.mean(death_list))
+    # print("Median death:", np.median(death_list))
+    # print("Max death:", np.max(death_list))
+    # print("Min death:", np.min(death_list))
+    # print("95th percentile death:", np.percentile(death_list, 95))
+
+    return persistence_images
 
 if __name__ == "__main__":
     main()
