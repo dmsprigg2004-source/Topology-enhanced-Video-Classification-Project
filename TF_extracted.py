@@ -27,7 +27,10 @@ layer_3_filters = 128
 
 num_classes = 101
 
+# Test mode feature that allows for testing on only part of the data
 test_mode = False
+load_num_categories = 10
+cur_categories_loaded = 0
 
 def main():
 
@@ -154,7 +157,11 @@ def load_data(path_dir, num_classes, num_frames):
                 # Append category name to labels
                 labels.append(category)
 
-        if test_mode == True: # Only here while testing
+        # Track number of categories loaded
+        cur_categories_loaded += 1
+
+        # If test mode is on and desired number of categories have been loaded, break loop
+        if test_mode == True and load_num_categories == cur_categories_loaded:
             break
 
     # Make video_frames list an array
@@ -279,7 +286,7 @@ def generate_persistence_images(simplex_trees):
     # Initalize list of persistence images
     persistence_images = []
 
-    # Loop through unputted simplex trees
+    # Loop through inputted simplex trees
     for tree in simplex_trees:
 
         # Create persistence image
