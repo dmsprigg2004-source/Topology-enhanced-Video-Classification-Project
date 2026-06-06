@@ -27,9 +27,8 @@ layer_3_filters = 128
 num_classes = 101
 
 # Test mode feature that allows for testing on only part of the data
-test_mode = False
-load_num_categories = 10
-cur_categories_loaded = 0
+test_mode = True
+load_num_categories = 5
 
 def main():
 
@@ -132,6 +131,9 @@ def load_data(path_dir, num_classes, num_frames):
     # Initalize frame and label lists
     video_frames = []
     labels = []
+
+    # Define counter for number of categories loaded
+    cur_categories_loaded = 0
 
     # Loop through video categories
     for category in tqdm(os.listdir(path_dir)):
