@@ -34,6 +34,8 @@ import os
 from pathlib import Path
 import shutil
 import copy
+from gtda.images import ImageToPointCloud
+import gudhi as gd
 
 def main():
 
@@ -340,6 +342,83 @@ def plot_history(history):
   ax2.legend(['Train', 'Validation'])
 
   plt.show()
+
+class topological_feature_extraction:
+   # Function that generates point clouds from the data
+  def generate_point_clouds(video_frames):
+
+      # Create object for ImageToPointCloud class
+      itpc = ImageToPointCloud()
+
+      # Initalize list of binary frames
+      binary_frames = []
+
+      # Create nested for loop to access individual frames
+      for video in video_frames:
+          for frame in video:
+              
+              # Convert frame to greyscale form
+              gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+              # Convert greyscale image to binary image
+              ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+
+              # Append binary image to list
+              binary_frames.append(binary_image)
+
+      # Convert list to array
+      binary_frames_arr = np.array(binary_frames)
+
+      # Generate point clouds from binary frames
+      point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
+
+      # Return point clouds
+      return point_clouds
+
+  # Function that generates persistence diagrams and simplex trees from point clouds
+  def generate_pds_sts(point_clouds):
+
+      # Initialize lists of persistence diagrams and simplex trees
+      persistence_diagrams = []
+      simplex_trees = []
+      
+      # Loop through each point cloud in the input
+      for point_cloud in point_clouds:
+
+          # Create a simplex tree from point cloud
+          simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
+
+          # Create persistence diagram from simplex tree
+          persistence_diagram = simplex_tree.persistence()
+
+          # Append persistence diagram to list
+          persistence_diagrams.append(persistence_diagram)
+
+          # Append simplex tree to list
+          simplex_trees.append(simplex_tree)
+
+      # Return lists
+      return simplex_trees, persistence_diagrams
+
+  # Function that generates persistence images from the data
+  def generate_persistence_images(simplex_trees):
+
+      # Initalize list of persistence images
+      persistence_images = []
+
+      # Loop through inputted simplex trees
+      for tree in simplex_trees:
+
+          # Create persistence image
+          persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
+                                          im_range=[0,1.5,0,1.5], resolution=[100,100])
+          persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
+
+          # Append image to list
+          persistence_images.append(persitence_image)
+
+      # Return persistence images
+      return persistence_images
 
 if __name__ == "__main__":
     main()
