@@ -1,306 +1,345 @@
-# This is the baseline model with topolocial features extracted from the data. Any model that uses TDA to 
-# enhance said model will start from here.
+# Copyright 2022 The TensorFlow Authors
+# Copyright 2026 Darcy Sprigg
 
-from pathlib import Path
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import tqdm
+import random
+import pathlib
+import itertools
+import collections
+
 import cv2
+import einops
 import numpy as np
-from tqdm import tqdm
-import os
-from tensorflow.keras.utils import to_categorical
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Dropout, BatchNormalization, Input
-from sklearn.metrics import classification_report
-from gtda.images import ImageToPointCloud
-import gudhi as gd
-import gudhi.representations
+import remotezip as rz
+import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Define global variables
-num_frames = 8
-resolution = 56
-num_epochs = 10
-layer_1_filters = 32
-layer_2_filters = 64
-layer_3_filters = 128
+import tensorflow as tf
+import keras
+from keras import layers
 
-num_classes = 101
-
-# Test mode feature that allows for testing on only part of the data
-test_mode = False
-load_num_categories = 10
+import os
+from pathlib import Path
+import shutil
+import copy
 
 def main():
 
-    # Firstly, lets import all video files from UCF101
-    path = Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
+    num_categories = 10
+    splits = {"train": 70, "val": 10, "test": 20}
+    epochs = 5
+    height = 224
+    width = 224 
+    n_frames = 10
+    batch_size = 8
 
-    # Load all video data
-    video_frames, encoded_labels, class_names = load_data(path, num_classes, num_frames)
+    UCF101_dir = pathlib.Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
 
-    # Split video data giving 70% for training, 20% for testing, and 10% for validation
-    video_frames, video_frames_test, encoded_labels, encoded_labels_test = train_test_split(
-        video_frames, encoded_labels, test_size=0.2, random_state=42)
+    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
+
+    output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
+                        tf.TensorSpec(shape = (), dtype = tf.int16))
     
-    video_frames, video_frames_val, encoded_labels, encoded_labels_val = train_test_split(
-        video_frames, encoded_labels, test_size=0.125, random_state=42)
+
+    train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True),
+                                            output_signature = output_signature)
+
+    train_ds = train_ds.batch(batch_size)
+
+    val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames),
+                                            output_signature = output_signature)
+    val_ds = val_ds.batch(batch_size)
+
+    test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames),
+                                            output_signature = output_signature)
+
+    test_ds = test_ds.batch(batch_size)
+
+    input_shape = (None, 10, height, width, 3)
+    input = layers.Input(shape=(input_shape[1:]))
+    x = input
+
+    x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = ResizeVideo(height // 2, width // 2)(x)
+
+    x = add_residual_block(x, 16, (3, 3, 3))
+    x = ResizeVideo(height // 4, width // 4)(x)
+
+    x = add_residual_block(x, 32, (3, 3, 3))
+    x = ResizeVideo(height // 8, width // 8)(x)
+
+    x = add_residual_block(x, 64, (3, 3, 3))
+    x = ResizeVideo(height // 16, width // 16)(x)
+
+    x = add_residual_block(x, 128, (3, 3, 3))
+
+    x = layers.GlobalAveragePooling3D()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(10)(x)
+
+    model = keras.Model(input, x)
+        
+
+    frames, label = next(iter(train_ds))
+    model.build(frames)
+
+    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True), 
+                optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+                metrics = ['accuracy'])
     
-    # Create input shape with a specified frame/pixel count and 3 channels
-    input_shape = (num_frames, resolution, resolution, 3)
+    history = model.fit(x = train_ds,
+                    epochs = epochs, 
+                    validation_data = val_ds)
+    
+    plot_history(history)
 
-    # Call helper function to generate point clouds for the data
-    point_clouds = generate_point_clouds(video_frames)
+    model.evaluate(test_ds, return_dict=True)
 
-    # Call helper function to generate simplex trees and persistence diagrams for the data
-    simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+    return 
 
-    # Call helper function to generate persistence images for the data
-    persistence_images = generate_persistence_images(simplex_trees)
+def split_class_lists(files_for_class, count):
+  split_files = []
+  remainder = {}
+  for cls in files_for_class:
+    split_files.extend(files_for_class[cls][:count])
+    remainder[cls] = files_for_class[cls][count:]
+  return split_files, remainder
 
-    # Call helper function to create model
-    model = create_3dCNN_model(input_shape, num_classes)
+def create_subset_dir(category_dict, categories_list, split_files, split_name):
 
-    # Train the model using training and validation data
-    history = model.fit(video_frames, encoded_labels, validation_data=(video_frames_val, encoded_labels_val), 
-                        epochs=num_epochs, batch_size=8)
+    new_dir_path = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/{split_name}')
 
-    # Evaluate the models performance using the testing data
-    loss, accuracy = model.evaluate(video_frames_test, encoded_labels_test)
+    if new_dir_path.is_dir():
+        shutil.rmtree(new_dir_path)
+    
+    new_dir_path.mkdir()
+   
+    for category in categories_list:
 
-    # Print the accuracy of the model
-    print(f'Test Accuracy: {accuracy:.2f}')
+        new_category_dir_path = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/{split_name}/{category}')
+        new_category_dir_path.mkdir()
 
-    # Obtain predictions from the model using testing data
-    encoded_predict = model.predict(video_frames_test)
+        for file in category_dict[category]:
+            for split_file in split_files:
+                if file == split_file:
+                   needed_file = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/UCF101/{category}/{file}')
+                   shutil.copy(needed_file, new_category_dir_path)
 
-    # Convert predicted classes and true classes to class labels
-    encoded_pred_classes = np.argmax(encoded_predict, axis=1)
-    encoded_true_classes = np.argmax(encoded_labels_test, axis=1)
+    return new_dir_path
 
-    # Create a classification report
-    class_report = classification_report(encoded_true_classes, encoded_pred_classes, target_names = class_names)
+def create_subset_dirs(num_categories, UCF101_dir, splits):
 
-    # Print report
-    print(class_report)
+    category_dict = {}
+    category_count = 0
 
-# Function made to extract a specified number of frames from a video file
-def extract_frames(path, num_frames):
+    for category in os.listdir(UCF101_dir):
 
-    # Open specified video file and initialize a list of frames
-    capture = cv2.VideoCapture(path)
-    frames = []
+        category_count += 1
 
-    # Get total number of frames in video
-    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    # Determine the interval at which the frames will be extracted
-    frame_interval = max(total_frames // num_frames, 1)
-
-    # Loop through frames and extract desired ones
-    for i in range(num_frames):
-
-        # Go to specified frame index
-        capture.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
-
-        # Get specified frame
-        ret, frame = capture.read()
-        
-        # Check if frame was successfully read
-        if not ret:
-            break
-        
-        # Resize frame to specifed size
-        frame = cv2.resize(frame, (resolution, resolution))
-
-        # Add frame to frames list
-        frames.append(frame)
-
-    # Close video file
-    capture.release()
-
-    # Fill in missing frames with blank frames
-    while len(frames) < num_frames:
-        frames.append(np.zeros((resolution, resolution, 3), np.uint8))
-
-    # Return array of frames
-    return np.array(frames)
-
-# This function loads video data and prepares it for training a 3D CNN model
-def load_data(path_dir, num_classes, num_frames):
-
-    # Initalize frame and label lists
-    video_frames = []
-    labels = []
-
-    # Define counter for number of categories loaded
-    cur_categories_loaded = 0
-
-    # Loop through video categories
-    for category in tqdm(os.listdir(path_dir)):
-
-        # Define path to given category
-        category_path = os.path.join(path_dir, category)
+        category_path = os.path.join(UCF101_dir, category)
 
         if os.path.isdir(category_path):
+            category_dict[category] = []
 
-            # Loop through each video within the specified category
             for video in os.listdir(category_path):
-                
-                # Define path to video
-                video_path = os.path.join(category_path, video)
+                category_dict[category].append(video)
 
-                # Call helper function to get array of video frames
-                frames = extract_frames(video_path, num_frames)
+        if category_count == num_categories:
+           break
 
-                # Append frames to video_frames list
-                video_frames.append(frames)
+    categories_list = list(category_dict.keys())[:num_categories]
 
-                # Append category name to labels
-                labels.append(category)
+    for category in categories_list:
+        new_files_for_class = category_dict[category]
+        random.shuffle(new_files_for_class)
+        category_dict[category] = new_files_for_class
 
-        # Track number of categories loaded
-        cur_categories_loaded += 1
+    subset_dirs = {}
+    category_dict_copy = copy.deepcopy(category_dict)
 
-        # If test mode is on and desired number of categories have been loaded, break loop
-        if test_mode == True and load_num_categories == cur_categories_loaded:
-            break
+    for split_name, split_count in splits.items():
+        print(split_name, ":")
 
-    # Make video_frames list an array
-    video_frames = np.array(video_frames)
+        split_files, category_dict_copy = split_class_lists(category_dict_copy, split_count)
 
-    # Get label codes and class names
-    codes, class_names = pd.factorize(np.array(labels))
+        split_dir = create_subset_dir(category_dict, categories_list, split_files, split_name)
 
-    # Convert labels into one-hot encoded format
-    encoded_labels = to_categorical(codes, num_classes)
+        subset_dirs[split_name] = split_dir
 
-    # Return video frames, encoded labels and class names
-    return video_frames, encoded_labels, class_names
+    return subset_dirs
 
-# Function that builds a 3D CNN video classification model
-def create_3dCNN_model(input_shape, num_classes):
+def format_frames(frame, output_size):
+  frame = tf.image.convert_image_dtype(frame, tf.float32)
+  frame = tf.image.resize_with_pad(frame, *output_size)
+  return frame
 
-    # Initialize model
-    model = Sequential()
+def frames_from_video_file(video_path, n_frames, output_size = (224,224), frame_step = 15):
+  result = []
+  src = cv2.VideoCapture(str(video_path))  
 
-    # Add input shape to model
-    model.add(Input(input_shape))
+  video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
-    # and relu activation
-    model.add(Conv3D(layer_1_filters, (3, 3, 3), activation='relu', padding='same'))
-    # Adding a 3D max pooling layer with a pool size of (2,2,2)
-    model.add(MaxPooling3D((2, 2, 2)))
-    # Adding a batch normalization layer
-    model.add(BatchNormalization())
+  need_length = 1 + (n_frames - 1) * frame_step
 
-    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
-    # and relu activation
-    model.add(Conv3D(layer_2_filters, (3, 3, 3), activation='relu', padding='same'))
-    # Adding a 3D max pooling layer with a pool size of (2,2,2)
-    model.add(MaxPooling3D((2, 2, 2)))
-    # Adding a batch normalization layer
-    model.add(BatchNormalization())
+  if need_length > video_length:
+    start = 0
+  else:
+    max_start = video_length - need_length
+    start = random.randint(0, max_start + 1)
 
-    # Adding a 3D convolutional layer containing a specified number of filters, a kernel size of (3,3,3) 
-    # and relu activation
-    model.add(Conv3D(layer_3_filters, (3, 3, 3), activation='relu', padding='same'))
-    # Adding a 3D max pooling layer with a pool size of (2,2,2)
-    model.add(MaxPooling3D((2, 2, 2)))
-    # Adding a batch normalization layer
-    model.add(BatchNormalization())
+  src.set(cv2.CAP_PROP_POS_FRAMES, start)
 
-    # Adding a flatten layer
-    model.add(Flatten())
-    # Adding dense layer with 512 units and relu activation
-    model.add(Dense(512, activation='relu'))
-    # Adding dropout layer with a dropout rate of 0.5
-    model.add(Dropout(0.5))
-    # Adding output layer with softmax activation
-    model.add(Dense(num_classes, activation='softmax'))
+  ret, frame = src.read()
+  result.append(format_frames(frame, output_size))
 
-    # Compiling the model with adam optimizer, categorical crossentropy loss and accuracy metric
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+  for _ in range(n_frames - 1):
+    for _ in range(frame_step):
+      ret, frame = src.read()
+    if ret:
+      frame = format_frames(frame, output_size)
+      result.append(frame)
+    else:
+      result.append(np.zeros_like(result[0]))
+  src.release()
+  result = np.array(result)[..., [2, 1, 0]]
+
+  return result
+
+class FrameGenerator:
+  def __init__(self, path, n_frames, training = False):
+    self.path = path
+    self.n_frames = n_frames
+    self.training = training
+    self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+    self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
+
+  def get_files_and_class_names(self):
+    video_paths = list(self.path.glob('*/*.avi'))
+    classes = [p.parent.name for p in video_paths] 
+    return video_paths, classes
+
+  def __call__(self):
+    video_paths, classes = self.get_files_and_class_names()
+
+    pairs = list(zip(video_paths, classes))
+
+    if self.training:
+      random.shuffle(pairs)
+
+    for path, name in pairs:
+      video_frames = frames_from_video_file(path, self.n_frames) 
+      label = self.class_ids_for_name[name]
+      yield video_frames, label
+
+class Conv2Plus1D(keras.layers.Layer):
+  def __init__(self, filters, kernel_size, padding):
+    super().__init__()
+    self.seq = keras.Sequential([  
+        layers.Conv3D(filters=filters,
+                      kernel_size=(1, kernel_size[1], kernel_size[2]),
+                      padding=padding),
+        layers.Conv3D(filters=filters, 
+                      kernel_size=(kernel_size[0], 1, 1),
+                      padding=padding)
+        ])
+  
+  def call(self, x):
+    return self.seq(x)
+
+class ResidualMain(keras.layers.Layer):
+  def __init__(self, filters, kernel_size):
+    super().__init__()
+    self.seq = keras.Sequential([
+        Conv2Plus1D(filters=filters,
+                    kernel_size=kernel_size,
+                    padding='same'),
+        layers.LayerNormalization(),
+        layers.ReLU(),
+        Conv2Plus1D(filters=filters, 
+                    kernel_size=kernel_size,
+                    padding='same'),
+        layers.LayerNormalization()
+    ])
     
-    # Return model
-    return model
+  def call(self, x):
+    return self.seq(x)
 
-# Function that generates point clouds from the data
-def generate_point_clouds(video_frames):
+class Project(keras.layers.Layer):
+  def __init__(self, units):
+    super().__init__()
+    self.seq = keras.Sequential([
+        layers.Dense(units),
+        layers.LayerNormalization()
+    ])
 
-    # Create object for ImageToPointCloud class
-    itpc = ImageToPointCloud()
+  def call(self, x):
+    return self.seq(x)
 
-    # Initalize list of binary frames
-    binary_frames = []
+def add_residual_block(input, filters, kernel_size):
+  out = ResidualMain(filters, 
+                     kernel_size)(input)
+  
+  res = input
+  if out.shape[-1] != input.shape[-1]:
+    res = Project(out.shape[-1])(res)
 
-    # Create nested for loop to access individual frames
-    for video in video_frames:
-        for frame in video:
-            
-            # Convert frame to greyscale form
-            gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+  return layers.add([res, out])
 
-            # Convert greyscale image to binary image
-            ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+class ResizeVideo(keras.layers.Layer):
+  def __init__(self, height, width):
+    super().__init__()
+    self.height = height
+    self.width = width
+    self.resizing_layer = layers.Resizing(self.height, self.width)
 
-            # Append binary image to list
-            binary_frames.append(binary_image)
+  def call(self, video):
+    old_shape = einops.parse_shape(video, 'b t h w c')
+    images = einops.rearrange(video, 'b t h w c -> (b t) h w c')
+    images = self.resizing_layer(images)
+    videos = einops.rearrange(
+        images, '(b t) h w c -> b t h w c',
+        t = old_shape['t'])
+    return videos
 
-    # Convert list to array
-    binary_frames_arr = np.array(binary_frames)
+def plot_history(history):
+  fig, (ax1, ax2) = plt.subplots(2)
 
-    # Generate point clouds from binary frames
-    point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
+  fig.set_size_inches(18.5, 10.5)
 
-    # Return point clouds
-    return point_clouds
+  ax1.set_title('Loss')
+  ax1.plot(history.history['loss'], label = 'train')
+  ax1.plot(history.history['val_loss'], label = 'test')
+  ax1.set_ylabel('Loss')
+  
+  max_loss = max(history.history['loss'] + history.history['val_loss'])
 
-# Function that generates persistence diagrams and simplex trees from point clouds
-def generate_pds_sts(point_clouds):
+  ax1.set_ylim([0, np.ceil(max_loss)])
+  ax1.set_xlabel('Epoch')
+  ax1.legend(['Train', 'Validation']) 
 
-    # Initialize lists of persistence diagrams and simplex trees
-    persistence_diagrams = []
-    simplex_trees = []
-    
-    # Loop through each point cloud in the input
-    for point_cloud in point_clouds:
+  ax2.set_title('Accuracy')
+  ax2.plot(history.history['accuracy'],  label = 'train')
+  ax2.plot(history.history['val_accuracy'], label = 'test')
+  ax2.set_ylabel('Accuracy')
+  ax2.set_ylim([0, 1])
+  ax2.set_xlabel('Epoch')
+  ax2.legend(['Train', 'Validation'])
 
-        # Create a simplex tree from point cloud
-        simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
-
-        # Create persistence diagram from simplex tree
-        persistence_diagram = simplex_tree.persistence()
-
-        # Append persistence diagram to list
-        persistence_diagrams.append(persistence_diagram)
-
-        # Append simplex tree to list
-        simplex_trees.append(simplex_tree)
-
-    # Return lists
-    return simplex_trees, persistence_diagrams
-
-# Function that generates persistence images from the data
-def generate_persistence_images(simplex_trees):
-
-    # Initalize list of persistence images
-    persistence_images = []
-
-    # Loop through inputted simplex trees
-    for tree in simplex_trees:
-
-        # Create persistence image
-        persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
-                                         im_range=[0,1.5,0,1.5], resolution=[100,100])
-        persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
-
-        # Append image to list
-        persistence_images.append(persitence_image)
-
-    # Return persistence images
-    return persistence_images
+  plt.show()
 
 if __name__ == "__main__":
     main()
