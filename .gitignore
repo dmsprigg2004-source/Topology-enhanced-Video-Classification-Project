@@ -1,3 +1,9 @@
-UCF101/
-env/
-.DS_Store
+**/UCF101
+**/train
+**/test
+**/val
+
+**/env
+**/.vscode
+
+**/.DS_Store
