@@ -51,21 +51,20 @@ def main():
 
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
 
-    output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
-                        tf.TensorSpec(shape = (), dtype = tf.int16))
+    output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
     
+    train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
+                                              output_signature = output_signature)
 
-    train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True),
-                                            output_signature = output_signature)
+    val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
+
+    test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+
+    
 
     train_ds = train_ds.batch(batch_size)
 
-    val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames),
-                                            output_signature = output_signature)
     val_ds = val_ds.batch(batch_size)
-
-    test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames),
-                                            output_signature = output_signature)
 
     test_ds = test_ds.batch(batch_size)
 
@@ -103,9 +102,7 @@ def main():
                 optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
                 metrics = ['accuracy'])
     
-    history = model.fit(x = train_ds,
-                    epochs = epochs, 
-                    validation_data = val_ds)
+    history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
     
     plot_history(history)
 
@@ -114,12 +111,14 @@ def main():
     return 
 
 def split_class_lists(files_for_class, count):
-  split_files = []
-  remainder = {}
-  for cls in files_for_class:
-    split_files.extend(files_for_class[cls][:count])
-    remainder[cls] = files_for_class[cls][count:]
-  return split_files, remainder
+    split_files = []
+    remainder = {}
+
+    for cls in files_for_class:
+        split_files.extend(files_for_class[cls][:count])
+        remainder[cls] = files_for_class[cls][count:]
+
+    return split_files, remainder
 
 def create_subset_dir(category_dict, categories_list, split_files, split_name):
 
@@ -185,240 +184,241 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
     return subset_dirs
 
 def format_frames(frame, output_size):
-  frame = tf.image.convert_image_dtype(frame, tf.float32)
-  frame = tf.image.resize_with_pad(frame, *output_size)
-  return frame
+    frame = tf.image.convert_image_dtype(frame, tf.float32)
+    frame = tf.image.resize_with_pad(frame, *output_size)
+
+    return frame
 
 def frames_from_video_file(video_path, n_frames, output_size = (224,224), frame_step = 15):
-  result = []
-  src = cv2.VideoCapture(str(video_path))  
+    result = []
+    src = cv2.VideoCapture(str(video_path))  
 
-  video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
+    video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
 
-  need_length = 1 + (n_frames - 1) * frame_step
+    need_length = 1 + (n_frames - 1) * frame_step
 
-  if need_length > video_length:
-    start = 0
-  else:
-    max_start = video_length - need_length
-    start = random.randint(0, max_start + 1)
-
-  src.set(cv2.CAP_PROP_POS_FRAMES, start)
-
-  ret, frame = src.read()
-  result.append(format_frames(frame, output_size))
-
-  for _ in range(n_frames - 1):
-    for _ in range(frame_step):
-      ret, frame = src.read()
-    if ret:
-      frame = format_frames(frame, output_size)
-      result.append(frame)
+    if need_length > video_length:
+        start = 0
     else:
-      result.append(np.zeros_like(result[0]))
-  src.release()
-  result = np.array(result)[..., [2, 1, 0]]
+        max_start = video_length - need_length
+        start = random.randint(0, max_start + 1)
 
-  return result
+    src.set(cv2.CAP_PROP_POS_FRAMES, start)
+
+    ret, frame = src.read()
+    result.append(format_frames(frame, output_size))
+
+    for _ in range(n_frames - 1):
+        for _ in range(frame_step):
+            ret, frame = src.read()
+        if ret:
+            frame = format_frames(frame, output_size)
+            result.append(frame)
+        else:
+            result.append(np.zeros_like(result[0]))
+
+    src.release()
+    result = np.array(result)[..., [2, 1, 0]]
+
+    return result
 
 class FrameGenerator:
-  def __init__(self, path, n_frames, training = False):
-    self.path = path
-    self.n_frames = n_frames
-    self.training = training
-    self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
-    self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
+    def __init__(self, path, n_frames, training = False):
+        self.path = path
+        self.n_frames = n_frames
+        self.training = training
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
-  def get_files_and_class_names(self):
-    video_paths = list(self.path.glob('*/*.avi'))
-    classes = [p.parent.name for p in video_paths] 
-    return video_paths, classes
+    def get_files_and_class_names(self):
+        video_paths = list(self.path.glob('*/*.avi'))
+        classes = [p.parent.name for p in video_paths] 
+        return video_paths, classes
 
-  def __call__(self):
-    video_paths, classes = self.get_files_and_class_names()
+    def __call__(self):
+        video_paths, classes = self.get_files_and_class_names()
 
-    pairs = list(zip(video_paths, classes))
+        pairs = list(zip(video_paths, classes))
 
-    if self.training:
-      random.shuffle(pairs)
+        if self.training:
+            random.shuffle(pairs)
 
-    for path, name in pairs:
-      video_frames = frames_from_video_file(path, self.n_frames) 
-      label = self.class_ids_for_name[name]
-      yield video_frames, label
+        for path, name in pairs:
+            video_frames = frames_from_video_file(path, self.n_frames) 
+            label = self.class_ids_for_name[name]
+            yield video_frames, label
 
 class Conv2Plus1D(keras.layers.Layer):
-  def __init__(self, filters, kernel_size, padding):
-    super().__init__()
-    self.seq = keras.Sequential([  
-        layers.Conv3D(filters=filters,
-                      kernel_size=(1, kernel_size[1], kernel_size[2]),
-                      padding=padding),
-        layers.Conv3D(filters=filters, 
-                      kernel_size=(kernel_size[0], 1, 1),
-                      padding=padding)
-        ])
+    def __init__(self, filters, kernel_size, padding):
+        super().__init__()
+        self.seq = keras.Sequential([  
+            layers.Conv3D(filters=filters,
+                          kernel_size=(1, kernel_size[1], kernel_size[2]),
+                          padding=padding),
+            layers.Conv3D(filters=filters, 
+                          kernel_size=(kernel_size[0], 1, 1),
+                          padding=padding)
+            ])
   
-  def call(self, x):
-    return self.seq(x)
+    def call(self, x):
+        return self.seq(x)
 
 class ResidualMain(keras.layers.Layer):
-  def __init__(self, filters, kernel_size):
-    super().__init__()
-    self.seq = keras.Sequential([
-        Conv2Plus1D(filters=filters,
-                    kernel_size=kernel_size,
-                    padding='same'),
-        layers.LayerNormalization(),
-        layers.ReLU(),
-        Conv2Plus1D(filters=filters, 
-                    kernel_size=kernel_size,
-                    padding='same'),
-        layers.LayerNormalization()
-    ])
+    def __init__(self, filters, kernel_size):
+        super().__init__()
+        self.seq = keras.Sequential([
+                  Conv2Plus1D(filters=filters,
+                              kernel_size=kernel_size,
+                              padding='same'),
+                  layers.LayerNormalization(),
+                  layers.ReLU(),
+                  Conv2Plus1D(filters=filters, 
+                              kernel_size=kernel_size,
+                              padding='same'),
+                  layers.LayerNormalization()
+                  ])
     
-  def call(self, x):
-    return self.seq(x)
+    def call(self, x):
+        return self.seq(x)
 
 class Project(keras.layers.Layer):
-  def __init__(self, units):
-    super().__init__()
-    self.seq = keras.Sequential([
-        layers.Dense(units),
-        layers.LayerNormalization()
-    ])
+    def __init__(self, units):
+        super().__init__()
+        self.seq = keras.Sequential([
+                  layers.Dense(units),
+                  layers.LayerNormalization()
+                  ])
 
-  def call(self, x):
-    return self.seq(x)
+    def call(self, x):
+        return self.seq(x)
 
 def add_residual_block(input, filters, kernel_size):
-  out = ResidualMain(filters, 
-                     kernel_size)(input)
+    out = ResidualMain(filters, kernel_size)(input)
   
-  res = input
-  if out.shape[-1] != input.shape[-1]:
-    res = Project(out.shape[-1])(res)
+    res = input
+    if out.shape[-1] != input.shape[-1]:
+        res = Project(out.shape[-1])(res)
 
-  return layers.add([res, out])
+    return layers.add([res, out])
 
 class ResizeVideo(keras.layers.Layer):
-  def __init__(self, height, width):
-    super().__init__()
-    self.height = height
-    self.width = width
-    self.resizing_layer = layers.Resizing(self.height, self.width)
+    def __init__(self, height, width):
+        super().__init__()
+        self.height = height
+        self.width = width
+        self.resizing_layer = layers.Resizing(self.height, self.width)
 
-  def call(self, video):
-    old_shape = einops.parse_shape(video, 'b t h w c')
-    images = einops.rearrange(video, 'b t h w c -> (b t) h w c')
-    images = self.resizing_layer(images)
-    videos = einops.rearrange(
-        images, '(b t) h w c -> b t h w c',
-        t = old_shape['t'])
-    return videos
+    def call(self, video):
+        old_shape = einops.parse_shape(video, 'b t h w c')
+        images = einops.rearrange(video, 'b t h w c -> (b t) h w c')
+        images = self.resizing_layer(images)
+        videos = einops.rearrange(
+                images, '(b t) h w c -> b t h w c',
+                t = old_shape['t'])
+        return videos
 
 def plot_history(history):
-  fig, (ax1, ax2) = plt.subplots(2)
+    fig, (ax1, ax2) = plt.subplots(2)
 
-  fig.set_size_inches(18.5, 10.5)
+    fig.set_size_inches(18.5, 10.5)
 
-  ax1.set_title('Loss')
-  ax1.plot(history.history['loss'], label = 'train')
-  ax1.plot(history.history['val_loss'], label = 'test')
-  ax1.set_ylabel('Loss')
-  
-  max_loss = max(history.history['loss'] + history.history['val_loss'])
+    ax1.set_title('Loss')
+    ax1.plot(history.history['loss'], label = 'train')
+    ax1.plot(history.history['val_loss'], label = 'test')
+    ax1.set_ylabel('Loss')
+    
+    max_loss = max(history.history['loss'] + history.history['val_loss'])
 
-  ax1.set_ylim([0, np.ceil(max_loss)])
-  ax1.set_xlabel('Epoch')
-  ax1.legend(['Train', 'Validation']) 
+    ax1.set_ylim([0, np.ceil(max_loss)])
+    ax1.set_xlabel('Epoch')
+    ax1.legend(['Train', 'Validation']) 
 
-  ax2.set_title('Accuracy')
-  ax2.plot(history.history['accuracy'],  label = 'train')
-  ax2.plot(history.history['val_accuracy'], label = 'test')
-  ax2.set_ylabel('Accuracy')
-  ax2.set_ylim([0, 1])
-  ax2.set_xlabel('Epoch')
-  ax2.legend(['Train', 'Validation'])
+    ax2.set_title('Accuracy')
+    ax2.plot(history.history['accuracy'],  label = 'train')
+    ax2.plot(history.history['val_accuracy'], label = 'test')
+    ax2.set_ylabel('Accuracy')
+    ax2.set_ylim([0, 1])
+    ax2.set_xlabel('Epoch')
+    ax2.legend(['Train', 'Validation'])
 
-  plt.show()
+    plt.show()
 
 class topological_feature_extraction:
-   # Function that generates point clouds from the data
-  def generate_point_clouds(video_frames):
+    # Function that generates point clouds from the data
+    def generate_point_clouds(video_frames):
 
-      # Create object for ImageToPointCloud class
-      itpc = ImageToPointCloud()
+        # Create object for ImageToPointCloud class
+        itpc = ImageToPointCloud()
 
-      # Initalize list of binary frames
-      binary_frames = []
+        # Initalize list of binary frames
+        binary_frames = []
 
-      # Create nested for loop to access individual frames
-      for video in video_frames:
-          for frame in video:
-              
-              # Convert frame to greyscale form
-              gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Create nested for loop to access individual frames
+        for video in video_frames:
+            for frame in video:
+                
+                # Convert frame to greyscale form
+                gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-              # Convert greyscale image to binary image
-              ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+                # Convert greyscale image to binary image
+                ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
 
-              # Append binary image to list
-              binary_frames.append(binary_image)
+                # Append binary image to list
+                binary_frames.append(binary_image)
 
-      # Convert list to array
-      binary_frames_arr = np.array(binary_frames)
+        # Convert list to array
+        binary_frames_arr = np.array(binary_frames)
 
-      # Generate point clouds from binary frames
-      point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
+        # Generate point clouds from binary frames
+        point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
 
-      # Return point clouds
-      return point_clouds
+        # Return point clouds
+        return point_clouds
 
-  # Function that generates persistence diagrams and simplex trees from point clouds
-  def generate_pds_sts(point_clouds):
+    # Function that generates persistence diagrams and simplex trees from point clouds
+    def generate_pds_sts(point_clouds):
 
-      # Initialize lists of persistence diagrams and simplex trees
-      persistence_diagrams = []
-      simplex_trees = []
-      
-      # Loop through each point cloud in the input
-      for point_cloud in point_clouds:
+        # Initialize lists of persistence diagrams and simplex trees
+        persistence_diagrams = []
+        simplex_trees = []
+        
+        # Loop through each point cloud in the input
+        for point_cloud in point_clouds:
 
-          # Create a simplex tree from point cloud
-          simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
+            # Create a simplex tree from point cloud
+            simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
 
-          # Create persistence diagram from simplex tree
-          persistence_diagram = simplex_tree.persistence()
+            # Create persistence diagram from simplex tree
+            persistence_diagram = simplex_tree.persistence()
 
-          # Append persistence diagram to list
-          persistence_diagrams.append(persistence_diagram)
+            # Append persistence diagram to list
+            persistence_diagrams.append(persistence_diagram)
 
-          # Append simplex tree to list
-          simplex_trees.append(simplex_tree)
+            # Append simplex tree to list
+            simplex_trees.append(simplex_tree)
 
-      # Return lists
-      return simplex_trees, persistence_diagrams
+        # Return lists
+        return simplex_trees, persistence_diagrams
 
-  # Function that generates persistence images from the data
-  def generate_persistence_images(simplex_trees):
+    # Function that generates persistence images from the data
+    def generate_persistence_images(simplex_trees):
 
-      # Initalize list of persistence images
-      persistence_images = []
+        # Initalize list of persistence images
+        persistence_images = []
 
-      # Loop through inputted simplex trees
-      for tree in simplex_trees:
+        # Loop through inputted simplex trees
+        for tree in simplex_trees:
 
-          # Create persistence image
-          persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
-                                          im_range=[0,1.5,0,1.5], resolution=[100,100])
-          persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
+            # Create persistence image
+            persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
+                                            im_range=[0,1.5,0,1.5], resolution=[100,100])
+            persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
 
-          # Append image to list
-          persistence_images.append(persitence_image)
+            # Append image to list
+            persistence_images.append(persitence_image)
 
-      # Return persistence images
-      return persistence_images
+        # Return persistence images
+        return persistence_images
 
 if __name__ == "__main__":
     main()
