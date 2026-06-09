@@ -60,55 +60,73 @@ def main():
 
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    
+    train_dict = tda_dict(train_ds)
+    val_dict = tda_dict(val_ds)
+    test_dict = tda_dict(test_ds)
 
-    train_ds = train_ds.batch(batch_size)
+    train_point_cloud_dict = {}
 
-    val_ds = val_ds.batch(batch_size)
+    for label, frames in train_dict.items():
+        train_point_cloud_dict[label] = generate_point_clouds(frames)
 
-    test_ds = test_ds.batch(batch_size)
+    print(train_point_cloud_dict)
 
-    input_shape = (None, 10, height, width, 3)
-    input = layers.Input(shape=(input_shape[1:]))
-    x = input
+    # train_ds = train_ds.batch(batch_size)
+    # val_ds = val_ds.batch(batch_size)
+    # test_ds = test_ds.batch(batch_size)
 
-    x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = ResizeVideo(height // 2, width // 2)(x)
+    # input_shape = (None, 10, height, width, 3)
+    # input = layers.Input(shape=(input_shape[1:]))
+    # x = input
 
-    x = add_residual_block(x, 16, (3, 3, 3))
-    x = ResizeVideo(height // 4, width // 4)(x)
+    # x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = ResizeVideo(height // 2, width // 2)(x)
 
-    x = add_residual_block(x, 32, (3, 3, 3))
-    x = ResizeVideo(height // 8, width // 8)(x)
+    # x = add_residual_block(x, 16, (3, 3, 3))
+    # x = ResizeVideo(height // 4, width // 4)(x)
 
-    x = add_residual_block(x, 64, (3, 3, 3))
-    x = ResizeVideo(height // 16, width // 16)(x)
+    # x = add_residual_block(x, 32, (3, 3, 3))
+    # x = ResizeVideo(height // 8, width // 8)(x)
 
-    x = add_residual_block(x, 128, (3, 3, 3))
+    # x = add_residual_block(x, 64, (3, 3, 3))
+    # x = ResizeVideo(height // 16, width // 16)(x)
 
-    x = layers.GlobalAveragePooling3D()(x)
-    x = layers.Flatten()(x)
-    x = layers.Dense(10)(x)
+    # x = add_residual_block(x, 128, (3, 3, 3))
 
-    model = keras.Model(input, x)
+    # x = layers.GlobalAveragePooling3D()(x)
+    # x = layers.Flatten()(x)
+    # x = layers.Dense(10)(x)
+
+    # model = keras.Model(input, x)
         
 
-    frames, label = next(iter(train_ds))
-    model.build(frames)
+    # frames, label = next(iter(train_ds))
+    # model.build(frames)
 
-    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True), 
-                optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
-                metrics = ['accuracy'])
+    # model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+    #               optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+    #               metrics = ['accuracy'])
     
-    history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
+    # history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
     
-    plot_history(history)
+    # plot_history(history)
 
-    model.evaluate(test_ds, return_dict=True)
+    # model.evaluate(test_ds, return_dict=True)
 
     return 
+
+def tda_dict(x_ds):
+
+    new_dict = {}
+    count = 0
+
+    for frames, label in x_ds:
+        new_dict[f"{label}.{count}"] = frames
+        count += 1
+      
+    return new_dict
 
 def split_class_lists(files_for_class, count):
     split_files = []
@@ -137,8 +155,8 @@ def create_subset_dir(category_dict, categories_list, split_files, split_name):
         for file in category_dict[category]:
             for split_file in split_files:
                 if file == split_file:
-                   needed_file = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/UCF101/{category}/{file}')
-                   shutil.copy(needed_file, new_category_dir_path)
+                    needed_file = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/UCF101/{category}/{file}')
+                    shutil.copy(needed_file, new_category_dir_path)
 
     return new_dir_path
 
@@ -343,82 +361,82 @@ def plot_history(history):
 
     plt.show()
 
-class topological_feature_extraction:
-    # Function that generates point clouds from the data
-    def generate_point_clouds(video_frames):
 
-        # Create object for ImageToPointCloud class
-        itpc = ImageToPointCloud()
+# Function that generates point clouds from the data
+def generate_point_clouds(video_frames):
 
-        # Initalize list of binary frames
-        binary_frames = []
+    # Create object for ImageToPointCloud class
+    itpc = ImageToPointCloud()
 
-        # Create nested for loop to access individual frames
-        for video in video_frames:
-            for frame in video:
-                
-                # Convert frame to greyscale form
-                gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Initalize list of binary frames
+    binary_frames = []
 
-                # Convert greyscale image to binary image
-                ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+    # Create nested for loop to access individual frames
+    for video in video_frames:
+        for frame in video:
+            
+            # Convert frame to greyscale form
+            gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                # Append binary image to list
-                binary_frames.append(binary_image)
+            # Convert greyscale image to binary image
+            ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
 
-        # Convert list to array
-        binary_frames_arr = np.array(binary_frames)
+            # Append binary image to list
+            binary_frames.append(binary_image)
 
-        # Generate point clouds from binary frames
-        point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
+    # Convert list to array
+    binary_frames_arr = np.array(binary_frames)
 
-        # Return point clouds
-        return point_clouds
+    # Generate point clouds from binary frames
+    point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
 
-    # Function that generates persistence diagrams and simplex trees from point clouds
-    def generate_pds_sts(point_clouds):
+    # Return point clouds
+    return point_clouds
 
-        # Initialize lists of persistence diagrams and simplex trees
-        persistence_diagrams = []
-        simplex_trees = []
-        
-        # Loop through each point cloud in the input
-        for point_cloud in point_clouds:
+# Function that generates persistence diagrams and simplex trees from point clouds
+def generate_pds_sts(point_clouds):
 
-            # Create a simplex tree from point cloud
-            simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
+    # Initialize lists of persistence diagrams and simplex trees
+    persistence_diagrams = []
+    simplex_trees = []
+    
+    # Loop through each point cloud in the input
+    for point_cloud in point_clouds:
 
-            # Create persistence diagram from simplex tree
-            persistence_diagram = simplex_tree.persistence()
+        # Create a simplex tree from point cloud
+        simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
 
-            # Append persistence diagram to list
-            persistence_diagrams.append(persistence_diagram)
+        # Create persistence diagram from simplex tree
+        persistence_diagram = simplex_tree.persistence()
 
-            # Append simplex tree to list
-            simplex_trees.append(simplex_tree)
+        # Append persistence diagram to list
+        persistence_diagrams.append(persistence_diagram)
 
-        # Return lists
-        return simplex_trees, persistence_diagrams
+        # Append simplex tree to list
+        simplex_trees.append(simplex_tree)
 
-    # Function that generates persistence images from the data
-    def generate_persistence_images(simplex_trees):
+    # Return lists
+    return simplex_trees, persistence_diagrams
 
-        # Initalize list of persistence images
-        persistence_images = []
+# Function that generates persistence images from the data
+def generate_persistence_images(simplex_trees):
 
-        # Loop through inputted simplex trees
-        for tree in simplex_trees:
+    # Initalize list of persistence images
+    persistence_images = []
 
-            # Create persistence image
-            persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
-                                            im_range=[0,1.5,0,1.5], resolution=[100,100])
-            persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
+    # Loop through inputted simplex trees
+    for tree in simplex_trees:
 
-            # Append image to list
-            persistence_images.append(persitence_image)
+        # Create persistence image
+        persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
+                                        im_range=[0,1.5,0,1.5], resolution=[100,100])
+        persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
 
-        # Return persistence images
-        return persistence_images
+        # Append image to list
+        persistence_images.append(persitence_image)
+
+    # Return persistence images
+    return persistence_images
 
 if __name__ == "__main__":
     main()
