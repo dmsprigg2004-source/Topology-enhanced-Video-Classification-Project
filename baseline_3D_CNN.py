@@ -37,15 +37,16 @@ import copy
 from gtda.images import ImageToPointCloud
 import gudhi as gd
 from gudhi.representations import PersistenceImage
+import random
 
 def main():
 
-    num_categories = 10
+    num_categories = 3
     splits = {"train": 35, "val": 5, "test": 10}
     epochs = 5
-    height = 224
-    width = 224 
-    n_frames = 10
+    height = 56
+    width = 56 
+    n_frames = 8
     batch_size = 8
 
     UCF101_dir = pathlib.Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
@@ -61,35 +62,9 @@ def main():
 
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    train_dict = tda_dict(train_ds)
-    val_dict = tda_dict(val_ds)
-    test_dict = tda_dict(test_ds)
-
-    train_point_cloud_dict = {}
-    train_simplex_trees_dict = {}
-    train_persistence_diagrams_dict = {}
-    train_persistence_images_dict = {}
-
-    for label, frames in train_dict.items():
-        train_point_cloud_dict[label] = generate_point_clouds(frames)
-
-    print("Created point clouds")
-
-    try:
-        for label, point_clouds in train_point_cloud_dict.items():
-            simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
-            train_simplex_trees_dict[label] = simplex_trees
-            train_persistence_diagrams_dict[label] = persistence_diagrams
-
-    except:
-        print("ERROR ERROR")
-
-    print("Created simplex trees and persistence diagrams")
-
-    for label, simplex_trees in train_simplex_trees_dict.items():
-        train_persistence_images_dict[label] = generate_persistence_images(simplex_trees)
-
-    print("Created persistence images")
+    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
+    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
+    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
     # train_ds = train_ds.batch(batch_size)
     # val_ds = val_ds.batch(batch_size)
@@ -137,19 +112,32 @@ def main():
 
     return 
 
-def tda_dict(x_ds):
-
-    new_dict = {}
+def tf_extraction(x_ds, name):
+    
+    frames_dict = {}
     count = 0
 
     for frames, label in x_ds:
-        new_dict[f"{label}.{count}"] = frames
+        frames_dict[f"{label}.{count}"] = frames
         count += 1
-      
-    return new_dict
+    
+    point_cloud_dict = {}
+    simplex_trees_dict = {}
+    persistence_diagrams_dict = {}
+    persistence_images_dict = {}
 
-def extract_topological_features(x_ds):
-    return
+    for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Genrating point clouds"):
+        point_cloud_dict[label] = generate_point_clouds(frames)
+
+    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence images"):
+        simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+        simplex_trees_dict[label] = simplex_trees
+        persistence_diagrams_dict[label] = persistence_diagrams
+
+    for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
+        persistence_images_dict[label] = generate_persistence_images(simplex_trees)
+
+    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_dict
     
 
 def split_class_lists(files_for_class, count):
@@ -430,6 +418,23 @@ def generate_pds_sts(point_clouds):
     
     # Loop through each point cloud in the input
     for point_cloud in point_clouds:
+        
+        if point_cloud.shape[0] == 0:
+
+            persistence_diagrams.append(None)
+            simplex_trees.append(None)
+            
+            continue
+        
+        num_points = point_cloud.shape[0]
+        max_points = 1000
+        
+        if num_points > max_points:
+            indices = np.random.choice(range(0, num_points), 1000)
+            point_cloud = point_cloud[indices]
+
+                
+        print("Point Cloud Shape :", point_cloud.shape)
 
         # Create a simplex tree from point cloud
         simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
@@ -454,6 +459,10 @@ def generate_persistence_images(simplex_trees):
 
     # Loop through inputted simplex trees
     for tree in simplex_trees:
+
+        if tree is None:
+            persistence_images.append(None)
+            continue
 
         # Create persistence image
         persitence_image = PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
