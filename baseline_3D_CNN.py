@@ -427,14 +427,10 @@ def generate_pds_sts(point_clouds):
             continue
         
         num_points = point_cloud.shape[0]
-        max_points = 1000
         
-        if num_points > max_points:
+        if num_points > 1000:
             indices = np.random.choice(range(0, num_points), 1000)
             point_cloud = point_cloud[indices]
-
-                
-        print("Point Cloud Shape :", point_cloud.shape)
 
         # Create a simplex tree from point cloud
         simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
