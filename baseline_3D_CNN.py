@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tqdm
+from tqdm import tqdm
 import random
 import pathlib
 import itertools
@@ -36,11 +36,12 @@ import shutil
 import copy
 from gtda.images import ImageToPointCloud
 import gudhi as gd
+from gudhi.representations import PersistenceImage
 
 def main():
 
     num_categories = 10
-    splits = {"train": 70, "val": 10, "test": 20}
+    splits = {"train": 35, "val": 5, "test": 10}
     epochs = 5
     height = 224
     width = 224 
@@ -65,11 +66,30 @@ def main():
     test_dict = tda_dict(test_ds)
 
     train_point_cloud_dict = {}
+    train_simplex_trees_dict = {}
+    train_persistence_diagrams_dict = {}
+    train_persistence_images_dict = {}
 
     for label, frames in train_dict.items():
         train_point_cloud_dict[label] = generate_point_clouds(frames)
 
-    print(train_point_cloud_dict)
+    print("Created point clouds")
+
+    try:
+        for label, point_clouds in train_point_cloud_dict.items():
+            simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+            train_simplex_trees_dict[label] = simplex_trees
+            train_persistence_diagrams_dict[label] = persistence_diagrams
+
+    except:
+        print("ERROR ERROR")
+
+    print("Created simplex trees and persistence diagrams")
+
+    for label, simplex_trees in train_simplex_trees_dict.items():
+        train_persistence_images_dict[label] = generate_persistence_images(simplex_trees)
+
+    print("Created persistence images")
 
     # train_ds = train_ds.batch(batch_size)
     # val_ds = val_ds.batch(batch_size)
@@ -127,6 +147,10 @@ def tda_dict(x_ds):
         count += 1
       
     return new_dict
+
+def extract_topological_features(x_ds):
+    return
+    
 
 def split_class_lists(files_for_class, count):
     split_files = []
@@ -191,11 +215,12 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
     category_dict_copy = copy.deepcopy(category_dict)
 
     for split_name, split_count in splits.items():
-        print(split_name, ":")
 
         split_files, category_dict_copy = split_class_lists(category_dict_copy, split_count)
 
         split_dir = create_subset_dir(category_dict, categories_list, split_files, split_name)
+
+        print(f"{split_name} directory created")
 
         subset_dirs[split_name] = split_dir
 
@@ -371,18 +396,21 @@ def generate_point_clouds(video_frames):
     # Initalize list of binary frames
     binary_frames = []
 
-    # Create nested for loop to access individual frames
-    for video in video_frames:
-        for frame in video:
+    # Create for loop to access individual frames
+    for frame in video_frames:
+        
+        np_frame = frame.numpy()
             
-            # Convert frame to greyscale form
-            gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Convert frame to greyscale form
+        grey_image = cv2.cvtColor(np_frame, cv2.COLOR_RGB2GRAY)
 
-            # Convert greyscale image to binary image
-            ret, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+        grey_image = (grey_image * 255).astype(np.uint8)
 
-            # Append binary image to list
-            binary_frames.append(binary_image)
+        # Convert greyscale image to binary image
+        ret, binary_image = cv2.threshold(grey_image, 127, 255, cv2.THRESH_BINARY)
+
+        # Append binary image to list
+        binary_frames.append(binary_image)
 
     # Convert list to array
     binary_frames_arr = np.array(binary_frames)
@@ -428,7 +456,7 @@ def generate_persistence_images(simplex_trees):
     for tree in simplex_trees:
 
         # Create persistence image
-        persitence_image = gd.representations.PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
+        persitence_image = PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
                                         im_range=[0,1.5,0,1.5], resolution=[100,100])
         persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
 
