@@ -2,8 +2,7 @@
 **/train
 **/test
 **/val
-
+**/.History Plots
 **/env
 **/.vscode
-
 **/.DS_Store
