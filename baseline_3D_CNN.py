@@ -50,18 +50,19 @@ def main():
     # Create subset directories
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
 
+    # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
     
+    # Generate training, validation and testing datasets
     train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
                                               output_signature = output_signature)
-
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
-
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    # train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
-    # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
-    # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
+    # Get topological features from the datasets
+    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
+    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
+    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
     train_ds = train_ds.batch(batch_size)
     val_ds = val_ds.batch(batch_size)
@@ -117,10 +118,13 @@ def main():
     actual, predicted = get_actual_predicted_labels(test_ds, model)
     plot_confusion_matrix(actual, predicted, labels, 'test')
 
+    # Call function to calculate precision and recall values
     precision, recall = calculate_precision_recall(actual, predicted, labels)
 
+    # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
+    # Call function to print classificaiton metrics
     print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     return 
@@ -467,45 +471,55 @@ def calculate_precision_recall(y_actual, y_pred, labels):
   
   return precision, recall
 
+# Function that calculates F1 scores
 def calculate_F1_scores(precision, recall):
 
+    # Initialize dictionary
     F1_scores = {}
 
+    # Loop through items in precision dictionary
     for key, value in precision.items():
+
+        # Define precision and recall values
         precision_val = value
         recall_val = recall[key]
 
+        # If precision or recall are None, add None to dictionary
         if precision_val is None or recall_val is None:
             F1_scores[key] = None
-
         else:
+            # Calculate F1 score and add to dicitonary
             F1_scores[key] = 2 * ((precision_val * recall_val)/(precision_val + recall_val))
 
+    # Return dicitonary
     return F1_scores
 
+# Function that prints classification metrics
 def print_classification_metrics(model_accuracy, precision, recall, F1_scores):
 
+    # Print line for readability
     print("------------------------------------------------------------------------")
 
+    # Print model accuracy
     print("Model accuracy:\n")
-
     print(model_accuracy)
 
+    # Loop through precision values and print them
     print("\nPrecision values:\n")
-    
     for key, value in precision.items():
         print(f"{key}: {value}")
     
+    # Loop through recall values and print them
     print("\nRecall values:\n")
-    
     for key, value in recall.items():
         print(f"{key}: {value}")
 
+    # Loop through F1 scores and print them
     print("\nF1 scores:\n")
-    
     for key, value in F1_scores.items():
         print(f"{key}: {value}")
 
+    # Print line for readability
     print("------------------------------------------------------------------------")
 
 # --------------------------------------- END OF MODEL EVALUATION CODE -------------------------------------------------
@@ -613,14 +627,14 @@ def generate_persistence_images(simplex_trees):
     # Return persistence images
     return persistence_images
 
-# Function that takes a data set and returns topological features of the data in the form of various dicitonaries
+# Function that takes a dataset and returns topological features of the data in the form of various dicitonaries
 def tf_extraction(x_ds, name):
     
     # Initialize dictionary and count variable
     frames_dict = {}
     count = 0
 
-    # Loop through all video frames in the data set to create a frame dicitonary
+    # Loop through all video frames in the dataset to create a frame dicitonary
     for frames, label in x_ds:
         frames_dict[f"{label}.{count}"] = frames
         count += 1
