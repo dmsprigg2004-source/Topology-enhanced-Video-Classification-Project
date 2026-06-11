@@ -122,6 +122,8 @@ def main():
 
     return 
 
+# ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
+
 def split_class_lists(files_for_class, count):
     split_files = []
     remainder = {}
@@ -261,6 +263,11 @@ class FrameGenerator:
             label = self.class_ids_for_name[name]
             yield video_frames, label
 
+# ------------------------------  END OF DATA LOADING AND PREPROCESSING CODE ----------------------------------------
+
+
+# ---------------------------------------  MODEL CREATION CODE ------------------------------------------------------
+
 class Conv2Plus1D(keras.layers.Layer):
     def __init__(self, filters, kernel_size, padding):
         super().__init__()
@@ -330,6 +337,8 @@ class ResizeVideo(keras.layers.Layer):
                 t = old_shape['t'])
         return videos
     
+# -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
+
 # ---------------------------------------  MODEL EVALUATION CODE ------------------------------------------------------
 
 def plot_history(history):
