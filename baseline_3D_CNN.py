@@ -36,7 +36,7 @@ import random
 # Defining global variables
 num_categories = 3
 splits = {"train": 70, "val": 10, "test": 20}
-epochs = 10
+epochs = 1
 height = 112
 width = 112
 n_frames = 10
@@ -60,9 +60,9 @@ def main():
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
     # Get topological features from the datasets
-    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
-    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
-    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
+    # train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
+    # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
+    # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
     train_ds = train_ds.batch(batch_size)
     val_ds = val_ds.batch(batch_size)
@@ -386,22 +386,24 @@ class ResizeVideo(keras.layers.Layer):
 
 # ---------------------------------------  MODEL EVALUATION CODE ------------------------------------------------------
 
+# Function that generates plots showing how accuracy and loss change throughout training
 def plot_history(history):
-    fig, (ax1, ax2) = plt.subplots(2)
 
+    # Initialize subplots within new figure window and set figure size
+    fig, (ax1, ax2) = plt.subplots(2)
     fig.set_size_inches(18.5, 10.5)
 
+    # Generate first subplot
     ax1.set_title('Loss')
     ax1.plot(history.history['loss'], label = 'train')
     ax1.plot(history.history['val_loss'], label = 'test')
     ax1.set_ylabel('Loss')
-    
     max_loss = max(history.history['loss'] + history.history['val_loss'])
-
     ax1.set_ylim([0, np.ceil(max_loss)])
     ax1.set_xlabel('Epoch')
     ax1.legend(['Train', 'Validation']) 
 
+    # Generate second subplot
     ax2.set_title('Accuracy')
     ax2.plot(history.history['accuracy'],  label = 'train')
     ax2.plot(history.history['val_accuracy'], label = 'test')
@@ -410,66 +412,83 @@ def plot_history(history):
     ax2.set_xlabel('Epoch')
     ax2.legend(['Train', 'Validation'])
 
+    # Save figure and close figure window
     plt.savefig("./History_Plots/history_plot.png")
     plt.close()
 
+    # Print message indicating plot was saved
     print("History plot saved")
 
+# Function that retrieves actual and predicted labels from a dataset
 def get_actual_predicted_labels(dataset, model): 
-  actual = [labels for _, labels in dataset.unbatch()]
-  predicted = model.predict(dataset)
 
-  actual = tf.stack(actual, axis=0)
-  predicted = tf.concat(predicted, axis=0)
-  predicted = tf.argmax(predicted, axis=1)
+    # Obtain actual and predicted labels and format them
+    actual = [labels for _, labels in dataset.unbatch()]
+    predicted = model.predict(dataset)
+    actual = tf.stack(actual, axis=0)
+    predicted = tf.concat(predicted, axis=0)
+    predicted = tf.argmax(predicted, axis=1)
 
-  return actual, predicted
+    # return actual and predicted labels
+    return actual, predicted
 
+# Function that plots a confusion matrix
 def plot_confusion_matrix(actual, predicted, labels, ds_type):
-  cm = tf.math.confusion_matrix(actual, predicted)
-  ax = sns.heatmap(cm, annot=True, fmt='g')
-  sns.set(rc={'figure.figsize':(12, 12)})
-  sns.set(font_scale=1.4)
-  ax.set_title('Confusion matrix of action recognition for ' + ds_type)
-  ax.set_xlabel('Predicted Action')
-  ax.set_ylabel('Actual Action')
-  plt.xticks(rotation=90)
-  plt.yticks(rotation=0)
-  ax.xaxis.set_ticklabels(labels)
-  ax.yaxis.set_ticklabels(labels)
 
-  plt.savefig("./Confusion_Matrices/confusion_matrix.png")
-  plt.close() 
+    # Generate confusion matrix
+    cm = tf.math.confusion_matrix(actual, predicted)
+    ax = sns.heatmap(cm, annot=True, fmt='g')
+    sns.set(rc={'figure.figsize':(12, 12)})
+    sns.set(font_scale=1.4)
+    ax.set_title('Confusion matrix of action recognition for ' + ds_type)
+    ax.set_xlabel('Predicted Action')
+    ax.set_ylabel('Actual Action')
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    ax.xaxis.set_ticklabels(labels)
+    ax.yaxis.set_ticklabels(labels)
 
-  print("Confusion matrix saved")
+    # Save figure and close figure window
+    plt.savefig(f"./Confusion_Matrices/confusion_matrix_{ds_type}.png")
+    plt.close() 
+    
+    # Print message indicating confusion matrix was saved
+    print(f"Confusion matrix for {ds_type} saved")
 
+# Function that calcuates precision and recall values
 def calculate_precision_recall(y_actual, y_pred, labels):
-  cm = tf.math.confusion_matrix(y_actual, y_pred)
-  tp = np.diag(cm)
-  precision = dict()
-  recall = dict()
-  for i in range(len(labels)):
-    col = cm[:, i]
-    fp = np.sum(col) - tp[i]
-    
-    row = cm[i, :]
-    fn = np.sum(row) - tp[i]
-
-    if tp[i] + fp != 0:
-    
-        precision[labels[i]] = tp[i] / (tp[i] + fp)
-
-    else:
-        precision[labels[i]] = None
-
-    if tp[i] + fn != 0:
-
-        recall[labels[i]] = tp[i] / (tp[i] + fn)
-    
-    else:
-        recall[labels[i]] = None
   
-  return precision, recall
+    # Compute confusion matrix and diagonal of the matrix
+    cm = tf.math.confusion_matrix(y_actual, y_pred)
+    tp = np.diag(cm)
+
+    # Initialize precision and recall dictionaries
+    precision = dict()
+    recall = dict()
+
+    # Loop through range
+    for i in range(len(labels)):
+
+        # Calculate false positives and false negatives
+        col = cm[:, i]
+        fp = np.sum(col) - tp[i]
+        row = cm[i, :]
+        fn = np.sum(row) - tp[i]
+
+        # Calculate precision but avoid division by 0
+        if tp[i] + fp != 0:
+            precision[labels[i]] = tp[i] / (tp[i] + fp)
+        else:
+            precision[labels[i]] = None
+
+        # Calculate recall but avoid division by 0
+        if tp[i] + fn != 0:
+            recall[labels[i]] = tp[i] / (tp[i] + fn)
+        else:
+            recall[labels[i]] = None
+    
+    # Return precision and recall dicitonaries
+    return precision, recall
 
 # Function that calculates F1 scores
 def calculate_F1_scores(precision, recall):
