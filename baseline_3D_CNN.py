@@ -556,16 +556,19 @@ def generate_pds_sts(point_clouds):
     
     # Loop through each point cloud in the input
     for point_cloud in point_clouds:
+
+        # Define number of points in point cloud
+        num_points = point_cloud.shape[0]
         
-        if point_cloud.shape[0] == 0:
+        # If point cloud has zero points, append a "None" value to lists and continue loop
+        if num_points == 0:
 
             persistence_diagrams.append(None)
             simplex_trees.append(None)
             
             continue
         
-        num_points = point_cloud.shape[0]
-        
+        # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
         if num_points > 1000:
             indices = np.random.choice(range(0, num_points), 1000)
             point_cloud = point_cloud[indices]
@@ -594,6 +597,7 @@ def generate_persistence_images(simplex_trees):
     # Loop through inputted simplex trees
     for tree in simplex_trees:
 
+        # If tree has "None" value, append None to list and continue
         if tree is None:
             persistence_images.append(None)
             continue
@@ -609,31 +613,39 @@ def generate_persistence_images(simplex_trees):
     # Return persistence images
     return persistence_images
 
+# Function that takes a data set and returns topological features of the data in the form of various dicitonaries
 def tf_extraction(x_ds, name):
     
+    # Initialize dictionary and count variable
     frames_dict = {}
     count = 0
 
+    # Loop through all video frames in the data set to create a frame dicitonary
     for frames, label in x_ds:
         frames_dict[f"{label}.{count}"] = frames
         count += 1
     
+    # Initialize all output dictionaries
     point_cloud_dict = {}
     simplex_trees_dict = {}
     persistence_diagrams_dict = {}
     persistence_images_dict = {}
 
+    # Loop through frame dictionary to create point cloud dictionary
     for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Genrating point clouds"):
         point_cloud_dict[label] = generate_point_clouds(frames)
 
+    # Loop through point cloud dictionary to create simplex tree and persistence diagram dictionaries
     for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence images"):
         simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
         simplex_trees_dict[label] = simplex_trees
         persistence_diagrams_dict[label] = persistence_diagrams
-
+    
+    # Loop through simplex tree dictionary to create persistence images dictionary
     for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
         persistence_images_dict[label] = generate_persistence_images(simplex_trees)
 
+    # Return dicitonaries
     return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_dict
 
 # ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
