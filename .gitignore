@@ -2,8 +2,8 @@
 **/train
 **/test
 **/val
-**/.History_Plots
-**/.Confusion_Matrices
+**/History_Plots
+**/Confusion_Matrices
 **/env
 **/.vscode
 **/.DS_Store
