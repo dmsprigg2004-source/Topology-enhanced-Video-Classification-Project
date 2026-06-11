@@ -403,7 +403,7 @@ def plot_history(history):
     ax2.set_xlabel('Epoch')
     ax2.legend(['Train', 'Validation'])
 
-    plt.savefig("./History Plots/history_plot.png")
+    plt.savefig("./History_Plots/history_plot.png")
     plt.close()
 
     print("History plot saved")
@@ -431,7 +431,7 @@ def plot_confusion_matrix(actual, predicted, labels, ds_type):
   ax.xaxis.set_ticklabels(labels)
   ax.yaxis.set_ticklabels(labels)
 
-  plt.savefig("./Confusion Matrices/confusion_matrix.png")
+  plt.savefig("./Confusion_Matrices/confusion_matrix.png")
   plt.close() 
 
   print("Confusion matrix saved")
