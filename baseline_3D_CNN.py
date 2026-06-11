@@ -40,8 +40,8 @@ from gudhi.representations import PersistenceImage
 import random
 
 num_categories = 3
-splits = {"train": 35, "val": 5, "test": 10}
-epochs = 1
+splits = {"train": 70, "val": 10, "test": 20}
+epochs = 5
 height = 56
 width = 56 
 n_frames = 8
@@ -49,7 +49,7 @@ batch_size = 8
 
 def main():
 
-    UCF101_dir = pathlib.Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
+    UCF101_dir = pathlib.Path('./UCF101')
 
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
 
@@ -119,10 +119,20 @@ def main():
     plot_confusion_matrix(actual, predicted, labels, 'test')
 
     precision, recall = calculate_classification_metrics(actual, predicted, labels)
-    
-    print(precision)
 
-    print(recall)
+    print("------------------------------------------------------------------------")
+
+    print("Precision values:\n")
+    
+    for key, value in precision.items():
+        print(f"{key}: {value}")
+    
+    print("\nRecall values:\n")
+    
+    for key, value in recall.items():
+        print(f"{key}: {value}")
+
+    print("------------------------------------------------------------------------")
 
     return 
 
@@ -387,6 +397,7 @@ def plot_history(history):
     ax2.legend(['Train', 'Validation'])
 
     plt.savefig("./History Plots/history_plot.png")
+    plt.close()
 
     print("History plot saved")
 
@@ -412,6 +423,11 @@ def plot_confusion_matrix(actual, predicted, labels, ds_type):
   plt.yticks(rotation=0)
   ax.xaxis.set_ticklabels(labels)
   ax.yaxis.set_ticklabels(labels)
+
+  plt.savefig("./Confusion Matrices/confusion_matrix.png")
+  plt.close() 
+
+  print("Confusion matrix saved")
 
 def calculate_classification_metrics(y_actual, y_pred, labels):
   cm = tf.math.confusion_matrix(y_actual, y_pred)
