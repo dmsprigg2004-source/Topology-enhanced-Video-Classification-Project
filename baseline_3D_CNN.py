@@ -419,17 +419,17 @@ def plot_history(history):
     # Print message indicating plot was saved
     print("History plot saved")
 
-# Function that retrieves actual and predicted labels from a dataset
+# Function that retrieves actual and predicted values from a dataset
 def get_actual_predicted_labels(dataset, model): 
 
-    # Obtain actual and predicted labels and format them
+    # Obtain actual and predicted values and format them
     actual = [labels for _, labels in dataset.unbatch()]
     predicted = model.predict(dataset)
     actual = tf.stack(actual, axis=0)
     predicted = tf.concat(predicted, axis=0)
     predicted = tf.argmax(predicted, axis=1)
 
-    # return actual and predicted labels
+    # return actual and predicted values
     return actual, predicted
 
 # Function that plots a confusion matrix
@@ -466,7 +466,7 @@ def calculate_precision_recall(y_actual, y_pred, labels):
     precision = dict()
     recall = dict()
 
-    # Loop through range
+    # For loop to calculate every precision and recall value
     for i in range(len(labels)):
 
         # Calculate false positives and false negatives
