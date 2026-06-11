@@ -64,57 +64,38 @@ def main():
     # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
     # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
+    # Create batches of the data
     train_ds = train_ds.batch(batch_size)
     val_ds = val_ds.batch(batch_size)
     test_ds = test_ds.batch(batch_size)
 
-    input_shape = (None, n_frames, height, width, 3)
-    input = layers.Input(shape=(input_shape[1:]))
-    x = input
-
-    x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = ResizeVideo(height // 2, width // 2)(x)
-
-    x = add_residual_block(x, 16, (3, 3, 3))
-    x = ResizeVideo(height // 4, width // 4)(x)
-
-    x = add_residual_block(x, 32, (3, 3, 3))
-    x = ResizeVideo(height // 8, width // 8)(x)
-
-    x = add_residual_block(x, 64, (3, 3, 3))
-    x = ResizeVideo(height // 16, width // 16)(x)
-
-    x = add_residual_block(x, 128, (3, 3, 3))
-
-    x = layers.GlobalAveragePooling3D()(x)
-    x = layers.Flatten()(x)
-    x = layers.Dense(num_categories)(x)
-
-    model = keras.Model(input, x)
-
-    frames, label = next(iter(train_ds))
-    model.build(frames)
+    # Call function to create the model
+    model = create_model(train_ds)
 
     model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
                   metrics = ['accuracy'])
     
+    # Obtain model history using model.fit() with training and validation data
     history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
     
+    # Call function to plot history of model training performance
     plot_history(history)
 
+    # Evaluate model to get accuracy and loss values
     model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
 
+    # Obtain rounded model accuracy value
     model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
 
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
     labels = list(fg.class_ids_for_name.keys())     
 
+    # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
     actual, predicted = get_actual_predicted_labels(train_ds, model)
     plot_confusion_matrix(actual, predicted, labels, 'training')
 
+    # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
     actual, predicted = get_actual_predicted_labels(test_ds, model)
     plot_confusion_matrix(actual, predicted, labels, 'test')
 
@@ -382,6 +363,38 @@ class ResizeVideo(keras.layers.Layer):
                 t = old_shape['t'])
         return videos
     
+def create_model(train_ds):
+    input_shape = (None, n_frames, height, width, 3)
+    input = layers.Input(shape=(input_shape[1:]))
+    x = input
+
+    x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = ResizeVideo(height // 2, width // 2)(x)
+
+    x = add_residual_block(x, 16, (3, 3, 3))
+    x = ResizeVideo(height // 4, width // 4)(x)
+
+    x = add_residual_block(x, 32, (3, 3, 3))
+    x = ResizeVideo(height // 8, width // 8)(x)
+
+    x = add_residual_block(x, 64, (3, 3, 3))
+    x = ResizeVideo(height // 16, width // 16)(x)
+
+    x = add_residual_block(x, 128, (3, 3, 3))
+
+    x = layers.GlobalAveragePooling3D()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(num_categories)(x)
+
+    model = keras.Model(input, x)
+
+    frames, label = next(iter(train_ds))
+    model.build(frames)
+
+    return model
+    
 # -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
 
 # ---------------------------------------  MODEL EVALUATION CODE ------------------------------------------------------
@@ -555,14 +568,16 @@ def generate_point_clouds(video_frames):
     # Initalize list of binary frames
     binary_frames = []
 
-    # Create for loop to access individual frames
+    # For loop to access individual frames
     for frame in video_frames:
         
+        # Convert to NumPy ndarray
         np_frame = frame.numpy()
-            
+
         # Convert frame to greyscale form
         grey_image = cv2.cvtColor(np_frame, cv2.COLOR_RGB2GRAY)
 
+        # Rescale grey image
         grey_image = (grey_image * 255).astype(np.uint8)
 
         # Convert greyscale image to binary image
@@ -595,10 +610,8 @@ def generate_pds_sts(point_clouds):
         
         # If point cloud has zero points, append a "None" value to lists and continue loop
         if num_points == 0:
-
             persistence_diagrams.append(None)
             simplex_trees.append(None)
-            
             continue
         
         # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
