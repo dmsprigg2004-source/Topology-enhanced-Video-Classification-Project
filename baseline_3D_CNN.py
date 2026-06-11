@@ -120,6 +120,8 @@ def main():
 
     precision, recall = calculate_classification_metrics(actual, predicted, labels)
 
+    F1_scores = calculate_F1_scores(precision, recall)
+
     print("------------------------------------------------------------------------")
 
     print("Precision values:\n")
@@ -130,6 +132,11 @@ def main():
     print("\nRecall values:\n")
     
     for key, value in recall.items():
+        print(f"{key}: {value}")
+
+    print("\nF1 scores:\n")
+    
+    for key, value in F1_scores.items():
         print(f"{key}: {value}")
 
     print("------------------------------------------------------------------------")
@@ -457,6 +464,21 @@ def calculate_classification_metrics(y_actual, y_pred, labels):
   
   return precision, recall
 
+def calculate_F1_scores(precision, recall):
+
+    F1_scores = {}
+
+    for key, value in precision.items():
+        precision_val = value
+        recall_val = recall[key]
+
+        if precision_val is None or recall_val is None:
+            F1_scores[key] = None
+
+        else:
+            F1_scores[key] = 2 * ((precision_val * recall_val)/(precision_val + recall_val))
+
+    return F1_scores
 
 # Function that generates point clouds from the data
 def generate_point_clouds(video_frames):
