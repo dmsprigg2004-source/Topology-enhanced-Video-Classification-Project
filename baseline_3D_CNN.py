@@ -16,20 +16,14 @@
 from tqdm import tqdm
 import random
 import pathlib
-import itertools
-import collections
-
 import cv2
 import einops
 import numpy as np
-import remotezip as rz
 import seaborn as sns
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
 import keras
 from keras import layers
-
 import os
 from pathlib import Path
 import shutil
@@ -41,10 +35,10 @@ import random
 
 num_categories = 3
 splits = {"train": 70, "val": 10, "test": 20}
-epochs = 5
-height = 56
-width = 56 
-n_frames = 8
+epochs = 10
+height = 112
+width = 112
+n_frames = 10
 batch_size = 8
 
 def main():
@@ -92,7 +86,7 @@ def main():
 
     x = layers.GlobalAveragePooling3D()(x)
     x = layers.Flatten()(x)
-    x = layers.Dense(10)(x)
+    x = layers.Dense(num_categories)(x)
 
     model = keras.Model(input, x)
 
@@ -107,7 +101,9 @@ def main():
     
     plot_history(history)
 
-    model.evaluate(test_ds, return_dict=True)
+    model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
+
+    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
 
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
     labels = list(fg.class_ids_for_name.keys())     
@@ -118,58 +114,13 @@ def main():
     actual, predicted = get_actual_predicted_labels(test_ds, model)
     plot_confusion_matrix(actual, predicted, labels, 'test')
 
-    precision, recall = calculate_classification_metrics(actual, predicted, labels)
+    precision, recall = calculate_precision_recall(actual, predicted, labels)
 
     F1_scores = calculate_F1_scores(precision, recall)
 
-    print("------------------------------------------------------------------------")
-
-    print("Precision values:\n")
-    
-    for key, value in precision.items():
-        print(f"{key}: {value}")
-    
-    print("\nRecall values:\n")
-    
-    for key, value in recall.items():
-        print(f"{key}: {value}")
-
-    print("\nF1 scores:\n")
-    
-    for key, value in F1_scores.items():
-        print(f"{key}: {value}")
-
-    print("------------------------------------------------------------------------")
+    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     return 
-
-def tf_extraction(x_ds, name):
-    
-    frames_dict = {}
-    count = 0
-
-    for frames, label in x_ds:
-        frames_dict[f"{label}.{count}"] = frames
-        count += 1
-    
-    point_cloud_dict = {}
-    simplex_trees_dict = {}
-    persistence_diagrams_dict = {}
-    persistence_images_dict = {}
-
-    for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Genrating point clouds"):
-        point_cloud_dict[label] = generate_point_clouds(frames)
-
-    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence images"):
-        simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
-        simplex_trees_dict[label] = simplex_trees
-        persistence_diagrams_dict[label] = persistence_diagrams
-
-    for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
-        persistence_images_dict[label] = generate_persistence_images(simplex_trees)
-
-    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_dict
-    
 
 def split_class_lists(files_for_class, count):
     split_files = []
@@ -183,7 +134,7 @@ def split_class_lists(files_for_class, count):
 
 def create_subset_dir(category_dict, categories_list, split_files, split_name):
 
-    new_dir_path = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/{split_name}')
+    new_dir_path = Path(f'./{split_name}')
 
     if new_dir_path.is_dir():
         shutil.rmtree(new_dir_path)
@@ -192,13 +143,13 @@ def create_subset_dir(category_dict, categories_list, split_files, split_name):
    
     for category in categories_list:
 
-        new_category_dir_path = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/{split_name}/{category}')
+        new_category_dir_path = Path(f'./{split_name}/{category}')
         new_category_dir_path.mkdir()
 
         for file in category_dict[category]:
             for split_file in split_files:
                 if file == split_file:
-                    needed_file = Path(f'/Users/darcysprigg/Coding/Co-op summer 2026/UCF101/{category}/{file}')
+                    needed_file = Path(f'./UCF101/{category}/{file}')
                     shutil.copy(needed_file, new_category_dir_path)
 
     return new_dir_path
@@ -378,6 +329,8 @@ class ResizeVideo(keras.layers.Layer):
                 images, '(b t) h w c -> b t h w c',
                 t = old_shape['t'])
         return videos
+    
+# ---------------------------------------  MODEL EVALUATION CODE ------------------------------------------------------
 
 def plot_history(history):
     fig, (ax1, ax2) = plt.subplots(2)
@@ -436,7 +389,7 @@ def plot_confusion_matrix(actual, predicted, labels, ds_type):
 
   print("Confusion matrix saved")
 
-def calculate_classification_metrics(y_actual, y_pred, labels):
+def calculate_precision_recall(y_actual, y_pred, labels):
   cm = tf.math.confusion_matrix(y_actual, y_pred)
   tp = np.diag(cm)
   precision = dict()
@@ -479,6 +432,36 @@ def calculate_F1_scores(precision, recall):
             F1_scores[key] = 2 * ((precision_val * recall_val)/(precision_val + recall_val))
 
     return F1_scores
+
+def print_classification_metrics(model_accuracy, precision, recall, F1_scores):
+
+    print("------------------------------------------------------------------------")
+
+    print("Model accuracy:\n")
+
+    print(model_accuracy)
+
+    print("\nPrecision values:\n")
+    
+    for key, value in precision.items():
+        print(f"{key}: {value}")
+    
+    print("\nRecall values:\n")
+    
+    for key, value in recall.items():
+        print(f"{key}: {value}")
+
+    print("\nF1 scores:\n")
+    
+    for key, value in F1_scores.items():
+        print(f"{key}: {value}")
+
+    print("------------------------------------------------------------------------")
+
+# --------------------------------------- END OF MODEL EVALUATION CODE -------------------------------------------------
+
+
+# ------------------------------------ TOPOLOGICAL FEATURE EXTRACTION CODE ---------------------------------------------
 
 # Function that generates point clouds from the data
 def generate_point_clouds(video_frames):
@@ -575,6 +558,35 @@ def generate_persistence_images(simplex_trees):
 
     # Return persistence images
     return persistence_images
+
+def tf_extraction(x_ds, name):
+    
+    frames_dict = {}
+    count = 0
+
+    for frames, label in x_ds:
+        frames_dict[f"{label}.{count}"] = frames
+        count += 1
+    
+    point_cloud_dict = {}
+    simplex_trees_dict = {}
+    persistence_diagrams_dict = {}
+    persistence_images_dict = {}
+
+    for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Genrating point clouds"):
+        point_cloud_dict[label] = generate_point_clouds(frames)
+
+    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence images"):
+        simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+        simplex_trees_dict[label] = simplex_trees
+        persistence_diagrams_dict[label] = persistence_diagrams
+
+    for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
+        persistence_images_dict[label] = generate_persistence_images(simplex_trees)
+
+    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_dict
+
+# ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
 
 if __name__ == "__main__":
     main()
