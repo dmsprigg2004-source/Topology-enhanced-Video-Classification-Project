@@ -33,6 +33,7 @@ import gudhi as gd
 from gudhi.representations import PersistenceImage
 import random
 
+# Defining global variables
 num_categories = 3
 splits = {"train": 70, "val": 10, "test": 20}
 epochs = 10
@@ -43,8 +44,10 @@ batch_size = 8
 
 def main():
 
+    # Defining path to video data
     UCF101_dir = pathlib.Path('./UCF101')
-
+    
+    # Create subset directories
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
 
     output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
@@ -124,78 +127,116 @@ def main():
 
 # ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
 
-def split_class_lists(files_for_class, count):
+# Function that gets a list of files to be used in either training, validation or testing as well as a dictionary 
+# specifying which files are unused
+def split_class_lists(category_dict, split_count):
+
+    # Initialize list and remainder dictionary
     split_files = []
     remainder = {}
 
-    for cls in files_for_class:
-        split_files.extend(files_for_class[cls][:count])
-        remainder[cls] = files_for_class[cls][count:]
+    # Loop through each category
+    for category in category_dict:
 
+        # Add needed files to list
+        split_files.extend(category_dict[category][:split_count])
+
+        # Add item to remainder dictionary specifying which files have not been chosen in that category
+        remainder[category] = category_dict[category][split_count:]
+
+    # Return list and remainder dictionary
     return split_files, remainder
 
+# Function to create a new subset directory
 def create_subset_dir(category_dict, categories_list, split_files, split_name):
 
+    # Define path for new directory
     new_dir_path = Path(f'./{split_name}')
 
+    # If directory exists, delete it
     if new_dir_path.is_dir():
         shutil.rmtree(new_dir_path)
     
+    # Make new directory
     new_dir_path.mkdir()
-   
+    
+    # Loop through categories
     for category in categories_list:
 
+        # Make a new directory inside previously made directory
         new_category_dir_path = Path(f'./{split_name}/{category}')
         new_category_dir_path.mkdir()
 
+        # Loop through files in each category
         for file in category_dict[category]:
+
+            # Loop through split_files
             for split_file in split_files:
+
+                # If the current file is to be used in this split, copy it to the new directory
                 if file == split_file:
                     needed_file = Path(f'./UCF101/{category}/{file}')
                     shutil.copy(needed_file, new_category_dir_path)
 
+    # Return path to new directory
     return new_dir_path
 
+# Function that creates subset directories for training, validation and testing
 def create_subset_dirs(num_categories, UCF101_dir, splits):
 
+    # Initialize dicitonary and category count
     category_dict = {}
     category_count = 0
 
+    # Loop through categories in UCF101
     for category in os.listdir(UCF101_dir):
 
+        # Add 1 to count
         category_count += 1
 
+        # Define path to category
         category_path = os.path.join(UCF101_dir, category)
 
+        # If path leads to a directory, add category to dictionary and copy all videos into a list under that category
         if os.path.isdir(category_path):
             category_dict[category] = []
 
             for video in os.listdir(category_path):
                 category_dict[category].append(video)
 
+        # Once reached specified category count, break
         if category_count == num_categories:
            break
-
+    
+    # Get list of category names within category_dict
     categories_list = list(category_dict.keys())[:num_categories]
 
+    # Create random order for videos within category_dict
     for category in categories_list:
         new_files_for_class = category_dict[category]
         random.shuffle(new_files_for_class)
         category_dict[category] = new_files_for_class
 
+    # Initialize dictionary and make a copy of category_dict
     subset_dirs = {}
     category_dict_copy = copy.deepcopy(category_dict)
 
+    # Loop through keys and values within splits dicitonary
     for split_name, split_count in splits.items():
 
+        # Get files to be used in this split
         split_files, category_dict_copy = split_class_lists(category_dict_copy, split_count)
 
+        # Create directory of this split
         split_dir = create_subset_dir(category_dict, categories_list, split_files, split_name)
 
+        # Print message indicating directory was made
         print(f"{split_name} directory created")
 
+        # Add directory to output directory
         subset_dirs[split_name] = split_dir
 
+    # Return subset directories
     return subset_dirs
 
 def format_frames(frame, output_size):
