@@ -3,6 +3,7 @@
 **/test
 **/val
 **/.History Plots
+**/.Confusion Matrices
 **/env
 **/.vscode
 **/.DS_Store
