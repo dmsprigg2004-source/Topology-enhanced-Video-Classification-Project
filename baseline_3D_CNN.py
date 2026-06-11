@@ -39,15 +39,15 @@ import gudhi as gd
 from gudhi.representations import PersistenceImage
 import random
 
-def main():
+num_categories = 3
+splits = {"train": 35, "val": 5, "test": 10}
+epochs = 1
+height = 56
+width = 56 
+n_frames = 8
+batch_size = 8
 
-    num_categories = 3
-    splits = {"train": 35, "val": 5, "test": 10}
-    epochs = 5
-    height = 56
-    width = 56 
-    n_frames = 8
-    batch_size = 8
+def main():
 
     UCF101_dir = pathlib.Path('/Users/darcysprigg/Coding/Co-op summer 2026/UCF101')
 
@@ -62,53 +62,67 @@ def main():
 
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
-    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
-    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
+    # train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
+    # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
+    # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
-    # train_ds = train_ds.batch(batch_size)
-    # val_ds = val_ds.batch(batch_size)
-    # test_ds = test_ds.batch(batch_size)
+    train_ds = train_ds.batch(batch_size)
+    val_ds = val_ds.batch(batch_size)
+    test_ds = test_ds.batch(batch_size)
 
-    # input_shape = (None, 10, height, width, 3)
-    # input = layers.Input(shape=(input_shape[1:]))
-    # x = input
+    input_shape = (None, n_frames, height, width, 3)
+    input = layers.Input(shape=(input_shape[1:]))
+    x = input
 
-    # x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
-    # x = layers.BatchNormalization()(x)
-    # x = layers.ReLU()(x)
-    # x = ResizeVideo(height // 2, width // 2)(x)
+    x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = ResizeVideo(height // 2, width // 2)(x)
 
-    # x = add_residual_block(x, 16, (3, 3, 3))
-    # x = ResizeVideo(height // 4, width // 4)(x)
+    x = add_residual_block(x, 16, (3, 3, 3))
+    x = ResizeVideo(height // 4, width // 4)(x)
 
-    # x = add_residual_block(x, 32, (3, 3, 3))
-    # x = ResizeVideo(height // 8, width // 8)(x)
+    x = add_residual_block(x, 32, (3, 3, 3))
+    x = ResizeVideo(height // 8, width // 8)(x)
 
-    # x = add_residual_block(x, 64, (3, 3, 3))
-    # x = ResizeVideo(height // 16, width // 16)(x)
+    x = add_residual_block(x, 64, (3, 3, 3))
+    x = ResizeVideo(height // 16, width // 16)(x)
 
-    # x = add_residual_block(x, 128, (3, 3, 3))
+    x = add_residual_block(x, 128, (3, 3, 3))
 
-    # x = layers.GlobalAveragePooling3D()(x)
-    # x = layers.Flatten()(x)
-    # x = layers.Dense(10)(x)
+    x = layers.GlobalAveragePooling3D()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(10)(x)
 
-    # model = keras.Model(input, x)
-        
+    model = keras.Model(input, x)
 
-    # frames, label = next(iter(train_ds))
-    # model.build(frames)
+    frames, label = next(iter(train_ds))
+    model.build(frames)
 
-    # model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-    #               optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
-    #               metrics = ['accuracy'])
+    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                  optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+                  metrics = ['accuracy'])
     
-    # history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
+    history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
     
-    # plot_history(history)
+    plot_history(history)
 
-    # model.evaluate(test_ds, return_dict=True)
+    model.evaluate(test_ds, return_dict=True)
+
+    fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
+    labels = list(fg.class_ids_for_name.keys())     
+
+    actual, predicted = get_actual_predicted_labels(train_ds, model)
+    plot_confusion_matrix(actual, predicted, labels, 'training')
+
+    actual, predicted = get_actual_predicted_labels(test_ds, model)
+    plot_confusion_matrix(actual, predicted, labels, 'test')
+
+    precision, recall = calculate_classification_metrics(actual, predicted, labels)
+    
+    print(precision)
+
+    print(recall)
 
     return 
 
@@ -220,7 +234,7 @@ def format_frames(frame, output_size):
 
     return frame
 
-def frames_from_video_file(video_path, n_frames, output_size = (224,224), frame_step = 15):
+def frames_from_video_file(video_path, n_frames, output_size = (height,width), frame_step = 15):
     result = []
     src = cv2.VideoCapture(str(video_path))  
 
@@ -372,7 +386,60 @@ def plot_history(history):
     ax2.set_xlabel('Epoch')
     ax2.legend(['Train', 'Validation'])
 
-    plt.show()
+    plt.savefig("./History Plots/history_plot.png")
+
+    print("History plot saved")
+
+def get_actual_predicted_labels(dataset, model): 
+  actual = [labels for _, labels in dataset.unbatch()]
+  predicted = model.predict(dataset)
+
+  actual = tf.stack(actual, axis=0)
+  predicted = tf.concat(predicted, axis=0)
+  predicted = tf.argmax(predicted, axis=1)
+
+  return actual, predicted
+
+def plot_confusion_matrix(actual, predicted, labels, ds_type):
+  cm = tf.math.confusion_matrix(actual, predicted)
+  ax = sns.heatmap(cm, annot=True, fmt='g')
+  sns.set(rc={'figure.figsize':(12, 12)})
+  sns.set(font_scale=1.4)
+  ax.set_title('Confusion matrix of action recognition for ' + ds_type)
+  ax.set_xlabel('Predicted Action')
+  ax.set_ylabel('Actual Action')
+  plt.xticks(rotation=90)
+  plt.yticks(rotation=0)
+  ax.xaxis.set_ticklabels(labels)
+  ax.yaxis.set_ticklabels(labels)
+
+def calculate_classification_metrics(y_actual, y_pred, labels):
+  cm = tf.math.confusion_matrix(y_actual, y_pred)
+  tp = np.diag(cm)
+  precision = dict()
+  recall = dict()
+  for i in range(len(labels)):
+    col = cm[:, i]
+    fp = np.sum(col) - tp[i]
+    
+    row = cm[i, :]
+    fn = np.sum(row) - tp[i]
+
+    if tp[i] + fp != 0:
+    
+        precision[labels[i]] = tp[i] / (tp[i] + fp)
+
+    else:
+        precision[labels[i]] = None
+
+    if tp[i] + fn != 0:
+
+        recall[labels[i]] = tp[i] / (tp[i] + fn)
+    
+    else:
+        recall[labels[i]] = None
+  
+  return precision, recall
 
 
 # Function that generates point clouds from the data
