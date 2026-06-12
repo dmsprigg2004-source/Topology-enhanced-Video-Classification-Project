@@ -72,11 +72,12 @@ def main():
     # Call function to create the model
     model = create_model(train_ds)
 
+    # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
     model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
                   metrics = ['accuracy'])
     
-    # Obtain model history using model.fit() with training and validation data
+    # Train the model and obtain model history using model.fit()
     history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
     
     # Call function to plot history of model training performance
@@ -88,8 +89,9 @@ def main():
     # Obtain rounded model accuracy value
     model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
 
+    # Use FrameGenerator class to obtain class labels from training data
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
-    labels = list(fg.class_ids_for_name.keys())     
+    labels = list(fg.class_ids_for_name.keys())
 
     # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
     actual, predicted = get_actual_predicted_labels(train_ds, model)
@@ -224,46 +226,78 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
     # Return subset directories
     return subset_dirs
 
+# Function that formats a specified frame
 def format_frames(frame, output_size):
+
+    # Change frame data type and resize it
     frame = tf.image.convert_image_dtype(frame, tf.float32)
     frame = tf.image.resize_with_pad(frame, *output_size)
 
+    # Return frame
     return frame
 
+# Function that extracts frames from a video file
 def frames_from_video_file(video_path, n_frames, output_size = (height,width), frame_step = 15):
+
+    # Initalize output list 
     result = []
+
+    # Initalize new VideoCapture object
     src = cv2.VideoCapture(str(video_path))  
 
+    # Get number of frames in video
     video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
 
+    # Define variable for needed number of frames
     need_length = 1 + (n_frames - 1) * frame_step
 
+    # If needed number of frames is longer than video length, set start to 0
     if need_length > video_length:
         start = 0
+
+    # Else, define a maximum starting position and set start to a random number between that and 0
     else:
         max_start = video_length - need_length
         start = random.randint(0, max_start + 1)
 
+    # Set starting position using start variable
     src.set(cv2.CAP_PROP_POS_FRAMES, start)
 
+    # Read video frame
     ret, frame = src.read()
+
+    # Format frame and append to output list
     result.append(format_frames(frame, output_size))
 
+    # Loop one time for each remaining needed frame
     for _ in range(n_frames - 1):
+
+        # Loop a specified number of times to skip frames
         for _ in range(frame_step):
+
+            # Read video frame
             ret, frame = src.read()
+
+        # If frame was extracted, format and add to result, otherwise add fully black image to result
         if ret:
             frame = format_frames(frame, output_size)
             result.append(frame)
         else:
             result.append(np.zeros_like(result[0]))
 
+    # Release VideoCapture object
     src.release()
+
+    # Convert result to an array and rearrange color channels
     result = np.array(result)[..., [2, 1, 0]]
 
+    # Return array
     return result
 
+# Define FrameGenerator class
 class FrameGenerator:
+
+    # __init__ function to initialize instance attributes
     def __init__(self, path, n_frames, training = False):
         self.path = path
         self.n_frames = n_frames
@@ -271,22 +305,39 @@ class FrameGenerator:
         self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
         self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
+    # Function that returns lists of paths to video files and class names for each video
     def get_files_and_class_names(self):
+
+        # Create lists of video paths and video class names
         video_paths = list(self.path.glob('*/*.avi'))
         classes = [p.parent.name for p in video_paths] 
+
+        # Return lists
         return video_paths, classes
 
+    # __call__ function that yields video frames with their respective label
     def __call__(self):
+
+        # Call function to get video paths and class names
         video_paths, classes = self.get_files_and_class_names()
 
+        # Create a list of tuples containing video paths and their respective class
         pairs = list(zip(video_paths, classes))
 
+        # If training is True, mix up pairs within pairs list
         if self.training:
             random.shuffle(pairs)
 
+        # Loop through each tuple in pairs list
         for path, name in pairs:
+
+            # Get video frames
             video_frames = frames_from_video_file(path, self.n_frames) 
+
+            # Get label
             label = self.class_ids_for_name[name]
+
+            # Yield video frames and its respective label
             yield video_frames, label
 
 # ------------------------------  END OF DATA LOADING AND PREPROCESSING CODE ----------------------------------------
