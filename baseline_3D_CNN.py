@@ -42,6 +42,9 @@ width = 112
 n_frames = 10
 batch_size = 8
 
+test_topology = False
+test_model = False
+
 def main():
 
     # Defining path to video data
@@ -59,56 +62,58 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    # Get topological features from the datasets
-    # train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
-    # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
-    # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
+    if test_topology == True:
+        # Get topological features from the datasets
+        train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
+        val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
+        test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
 
-    # Create batches of the data
-    train_ds = train_ds.batch(batch_size)
-    val_ds = val_ds.batch(batch_size)
-    test_ds = test_ds.batch(batch_size)
+    if test_model == True:
+        # Create batches of the data
+        train_ds = train_ds.batch(batch_size)
+        val_ds = val_ds.batch(batch_size)
+        test_ds = test_ds.batch(batch_size)
 
-    # Call function to create the 3D CNN model
-    model = create_3D_CNN(train_ds)
+        # Call function to create the 3D CNN model
+        model = create_3D_CNN(train_ds)
 
-    # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
-    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                  optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
-                  metrics = ['accuracy'])
-    
-    # Train the model and obtain model history using model.fit()
-    history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
-    
-    # Call function to plot history of model training performance
-    plot_history(history)
+        # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
+        model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                    optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+                    metrics = ['accuracy'])
+        
+        # Train the model and obtain model history using model.fit()
+        history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
+        
+        # Call function to plot history of model training performance
+        plot_history(history)
 
-    # Evaluate model to get accuracy and loss values
-    model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
+        # Evaluate model to get accuracy and loss values
+        model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
 
-    # Obtain rounded model accuracy value
-    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+        # Obtain rounded model accuracy value
+        model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
 
-    # Use FrameGenerator class to obtain class labels from training data
-    fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
-    labels = list(fg.class_ids_for_name.keys())
+        # Use FrameGenerator class to obtain class labels from training data
+        fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
+        labels = list(fg.class_ids_for_name.keys())
 
-    # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
-    actual, predicted = get_actual_predicted_labels(train_ds, model)
-    plot_confusion_matrix(actual, predicted, labels, 'training')
+        # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
+        actual, predicted = get_actual_predicted_labels(train_ds, model)
+        plot_confusion_matrix(actual, predicted, labels, 'training')
 
-    # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
-    actual, predicted = get_actual_predicted_labels(test_ds, model)
-    plot_confusion_matrix(actual, predicted, labels, 'test')
+        # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
+        actual, predicted = get_actual_predicted_labels(test_ds, model)
+        plot_confusion_matrix(actual, predicted, labels, 'test')
 
-    # Call function to calculate precision and recall values
-    precision, recall = calculate_precision_recall(actual, predicted, labels)
+        # Call function to calculate precision and recall values
+        precision, recall = calculate_precision_recall(actual, predicted, labels)
 
-    # Call function to calculate F1 scores
-    F1_scores = calculate_F1_scores(precision, recall)
+        # Call function to calculate F1 scores
+        F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to print classificaiton metrics
-    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+        # Call function to print classificaiton metrics
+        print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     return 
 
