@@ -34,7 +34,7 @@ from gudhi.representations import PersistenceImage
 import random
 
 # Defining global variables
-num_categories = 3
+num_categories = 20
 splits = {"train": 70, "val": 10, "test": 20}
 epochs = 1
 height = 112
@@ -42,7 +42,7 @@ width = 112
 n_frames = 10
 batch_size = 8
 
-test_topology = False
+test_topology = True
 test_model = False
 
 def main():
@@ -780,8 +780,8 @@ def generate_persistence_images(simplex_trees):
             continue
 
         # Create persistence image
-        persitence_image = PersistenceImage(bandwidth=0.15, weight=lambda x: x[1]**2,
-                                        im_range=[0,1.5,0,1.5], resolution=[100,100])
+        persitence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
+                                        im_range=[0,18,0,18], resolution=[100,100])
         persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
 
         # Append image to list
