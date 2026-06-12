@@ -69,8 +69,8 @@ def main():
     val_ds = val_ds.batch(batch_size)
     test_ds = test_ds.batch(batch_size)
 
-    # Call function to create the model
-    model = create_model(train_ds)
+    # Call function to create the 3D CNN model
+    model = create_3D_CNN(train_ds)
 
     # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
     model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
@@ -345,9 +345,16 @@ class FrameGenerator:
 
 # ---------------------------------------  MODEL CREATION CODE ------------------------------------------------------
 
+# Define class to create a custom (2+1)D convolutional layer
 class Conv2Plus1D(keras.layers.Layer):
+
+    # __init__ function to initialize instance attributes
     def __init__(self, filters, kernel_size, padding):
+
+        # Initialize instance attributes within keras.layers.Layer
         super().__init__()
+
+        # Create small neural network with one 2D and one 1D convolutional layer
         self.seq = keras.Sequential([  
             layers.Conv3D(filters=filters,
                           kernel_size=(1, kernel_size[1], kernel_size[2]),
@@ -356,13 +363,21 @@ class Conv2Plus1D(keras.layers.Layer):
                           kernel_size=(kernel_size[0], 1, 1),
                           padding=padding)
             ])
-  
+    
+    # Function that creates above neural network with an input variable then returns 
     def call(self, x):
         return self.seq(x)
 
+# Define class that creates the main branch of the residual block
 class ResidualMain(keras.layers.Layer):
+
+    # __init__ function to initialize instance attributes
     def __init__(self, filters, kernel_size):
+
+        # Initialize instance attributes within keras.layers.Layer
         super().__init__()
+
+        # Create small neural network using Conv2Plus1D, layer normalization and ReLU activation
         self.seq = keras.Sequential([
                   Conv2Plus1D(filters=filters,
                               kernel_size=kernel_size,
@@ -375,75 +390,135 @@ class ResidualMain(keras.layers.Layer):
                   layers.LayerNormalization()
                   ])
     
+    # Function that creates above neural network with an input variable then returns 
     def call(self, x):
         return self.seq(x)
 
+# Define class that updates a branches shape to a specified size
 class Project(keras.layers.Layer):
+
+    # __init__ function to initialize instance attributes
     def __init__(self, units):
+
+        # Initialize instance attributes within keras.layers.Layer
         super().__init__()
+
+        # Create small neural network with a dense layer of specified size and layer normalization
         self.seq = keras.Sequential([
                   layers.Dense(units),
                   layers.LayerNormalization()
                   ])
 
+    # Function that creates above neural network with an input variable then returns 
     def call(self, x):
         return self.seq(x)
 
+# Function that creates a residual block
 def add_residual_block(input, filters, kernel_size):
+
+    # Create the main branch of the residual block and save it to a variable
     out = ResidualMain(filters, kernel_size)(input)
-  
+    
+    # Save input to new variable
     res = input
+
+    # If residual branch and main branch don't have the same shape, update residual branch
     if out.shape[-1] != input.shape[-1]:
+
+        # Call function to change the residual branches shape
         res = Project(out.shape[-1])(res)
 
+    # Add layers together and return
     return layers.add([res, out])
 
+# Define class to resize videos
 class ResizeVideo(keras.layers.Layer):
+
+    # __init__ function to initialize instance attributes
     def __init__(self, height, width):
+
+        # Initialize instance attributes within keras.layers.Layer
         super().__init__()
+
+        # Initialize remaining instance attributes
         self.height = height
         self.width = width
         self.resizing_layer = layers.Resizing(self.height, self.width)
 
+    # Function that resizes frames within videos
     def call(self, video):
+
+        # Define original shape of video
         old_shape = einops.parse_shape(video, 'b t h w c')
+
+        # Flatten batch and time dimensions so each frame may be treated independently
         images = einops.rearrange(video, 'b t h w c -> (b t) h w c')
+
+        # Resize images
         images = self.resizing_layer(images)
+
+        # Revert to original video shape
         videos = einops.rearrange(
                 images, '(b t) h w c -> b t h w c',
                 t = old_shape['t'])
+        
+        # Return videos
         return videos
-    
-def create_model(train_ds):
+
+# Function that creates a 3D CNN model using a training dataset
+def create_3D_CNN(train_ds):
+
+    # Define input shape
     input_shape = (None, n_frames, height, width, 3)
+
+    # Create input layer with input shape and copy to "x" variable
     input = layers.Input(shape=(input_shape[1:]))
     x = input
 
+    # Create a (2+1)D convolutional layer with the Conv2Plus1D class
     x = Conv2Plus1D(filters=16, kernel_size=(3, 7, 7), padding='same')(x)
+    # Normalize activations within neural network layer
     x = layers.BatchNormalization()(x)
+    # Implement ReLU activation layer
     x = layers.ReLU()(x)
+    # Resize video to half of its current hight and width
     x = ResizeVideo(height // 2, width // 2)(x)
 
+    # Add residual block with a specified number of filters and specific kernel size
     x = add_residual_block(x, 16, (3, 3, 3))
+    # Resize video to one quarter of its current hight and width
     x = ResizeVideo(height // 4, width // 4)(x)
 
+    # Add residual block with a specified number of filters and specific kernel size
     x = add_residual_block(x, 32, (3, 3, 3))
+    # Resize video to one eighth of its current hight and width
     x = ResizeVideo(height // 8, width // 8)(x)
 
+    # Add residual block with a specified number of filters and specific kernel size
     x = add_residual_block(x, 64, (3, 3, 3))
+    # Resize video to one sixteenth of its current hight and width
     x = ResizeVideo(height // 16, width // 16)(x)
 
+    # Add residual block with a specified number of filters and specific kernel size
     x = add_residual_block(x, 128, (3, 3, 3))
 
+    # Add layer that downsamples model data
     x = layers.GlobalAveragePooling3D()(x)
+
+    # Add layer to reshape data into one dimension
     x = layers.Flatten()(x)
+
+    # Add a dense layer the size of the number of categories
     x = layers.Dense(num_categories)(x)
 
+    # Define model using starting and ending points
     model = keras.Model(input, x)
 
+    # Initailize weights within neural network using a sample of video frames
     frames, label = next(iter(train_ds))
     model.build(frames)
 
+    # Return model
     return model
     
 # -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
