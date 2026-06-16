@@ -33,17 +33,18 @@ import gudhi as gd
 from gudhi.representations import PersistenceImage
 import random
 
-# Defining global variables
-num_categories = 20
-splits = {"train": 70, "val": 10, "test": 20}
+# Defining test settings
+num_categories = 1
+splits = {"train": 35, "val": 5, "test": 10}
 epochs = 1
-height = 112
-width = 112
+height = 56
+width = 56
 n_frames = 10
 batch_size = 8
 
-test_topology = True
-test_model = False
+# Choose which test to run
+test_baseline_model = False
+test_concatenation_based_fusion = True
 
 def main():
 
@@ -62,20 +63,24 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    if test_topology == True:
-        # Get topological features from the datasets
-        train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_pis_dict = tf_extraction(train_ds, "Training")
-        val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_pis_dict = tf_extraction(val_ds, "Validation")
-        test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_pis_dict = tf_extraction(test_ds, "Test")
+    # Get topological features from the datasets
+    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_persistence_images_list = tf_extraction(train_ds, "Training")
+    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_persistence_images_list = tf_extraction(val_ds, "Validation")
+    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_persistence_images_list = tf_extraction(test_ds, "Test")
 
-    if test_model == True:
+    # Test baseline model if selected
+    if test_baseline_model == True:
+
         # Create batches of the data
         train_ds = train_ds.batch(batch_size)
         val_ds = val_ds.batch(batch_size)
         test_ds = test_ds.batch(batch_size)
 
+        # Define input shape
+        input_shape = (None, n_frames, height, width, 3)
+
         # Call function to create the 3D CNN model
-        model = create_3D_CNN(train_ds)
+        model = create_3D_CNN(train_ds, input_shape)
 
         # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
         model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
@@ -104,6 +109,69 @@ def main():
 
         # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
         actual, predicted = get_actual_predicted_labels(test_ds, model)
+        plot_confusion_matrix(actual, predicted, labels, 'test')
+
+        # Call function to calculate precision and recall values
+        precision, recall = calculate_precision_recall(actual, predicted, labels)
+
+        # Call function to calculate F1 scores
+        F1_scores = calculate_F1_scores(precision, recall)
+
+        # Call function to print classificaiton metrics
+        print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+
+    # Test concatenation based fusion model if selected
+    elif test_concatenation_based_fusion == True:
+
+        # Define output signature
+        output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+
+        # Generate training, validation and testing datasets
+        train_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(train_ds, train_persistence_images_list), 
+                                                                    output_signature = output_signature)
+        val_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(val_ds, val_persistence_images_list), 
+                                                                    output_signature = output_signature)
+        test_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(test_ds, test_persistence_images_list), 
+                                                                    output_signature = output_signature)
+
+        # Batch data into desired sizes
+        train_concatenated_frames = train_concatenated_frames.batch(batch_size)
+        val_concatenated_frames = val_concatenated_frames.batch(batch_size)
+        test_concatenated_frames = test_concatenated_frames.batch(batch_size)
+
+        # Define input shape
+        input_shape = (None, n_frames, height, width, 4)
+
+        # Call function to create the 3D CNN model
+        model = create_3D_CNN(train_concatenated_frames, input_shape)
+
+        # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
+        model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                    optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+                    metrics = ['accuracy'])
+
+        # Train the model and obtain model history using model.fit()
+        history = model.fit(x = train_concatenated_frames, epochs = epochs, validation_data = val_concatenated_frames)
+
+        # Call function to plot history of model training performance
+        plot_history(history)
+
+        # Evaluate model to get accuracy and loss values
+        model_accuracy_and_loss = model.evaluate(test_concatenated_frames, return_dict=True)
+
+        # Obtain rounded model accuracy value
+        model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+
+        # Use FrameGenerator class to obtain class labels from training data
+        fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
+        labels = list(fg.class_ids_for_name.keys())
+
+        # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
+        actual, predicted = get_actual_predicted_labels(train_concatenated_frames, model)
+        plot_confusion_matrix(actual, predicted, labels, 'training')
+
+        # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
+        actual, predicted = get_actual_predicted_labels(test_concatenated_frames, model)
         plot_confusion_matrix(actual, predicted, labels, 'test')
 
         # Call function to calculate precision and recall values
@@ -470,11 +538,8 @@ class ResizeVideo(keras.layers.Layer):
         # Return videos
         return videos
 
-# Function that creates a 3D CNN model using a training dataset
-def create_3D_CNN(train_ds):
-
-    # Define input shape
-    input_shape = (None, n_frames, height, width, 3)
+# Function that creates a 3D CNN model using a training dataset and a specified input shape
+def create_3D_CNN(x_ds, input_shape):
 
     # Create input layer with input shape and copy to "x" variable
     input = layers.Input(shape=(input_shape[1:]))
@@ -520,7 +585,7 @@ def create_3D_CNN(train_ds):
     model = keras.Model(input, x)
 
     # Initailize weights within neural network using a sample of video frames
-    frames, label = next(iter(train_ds))
+    frames, label = next(iter(x_ds))
     model.build(frames)
 
     # Return model
@@ -781,7 +846,7 @@ def generate_persistence_images(simplex_trees):
 
         # Create persistence image
         persitence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
-                                        im_range=[0,18,0,18], resolution=[100,100])
+                                        im_range=[0,18,0,18], resolution=[height,width])
         persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
 
         # Append image to list
@@ -790,7 +855,7 @@ def generate_persistence_images(simplex_trees):
     # Return persistence images
     return persistence_images
 
-# Function that takes a dataset and returns topological features of the data in the form of various dicitonaries
+# Function that takes a dataset and returns topological features of the data
 def tf_extraction(x_ds, name):
     
     # Initialize dictionary and count variable
@@ -802,11 +867,11 @@ def tf_extraction(x_ds, name):
         frames_dict[f"{label}.{count}"] = frames
         count += 1
     
-    # Initialize all output dictionaries
+    # Initialize all output dictionaries and list
     point_cloud_dict = {}
     simplex_trees_dict = {}
     persistence_diagrams_dict = {}
-    persistence_images_dict = {}
+    persistence_images_list = []
 
     # Loop through frame dictionary to create point cloud dictionary
     for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Genrating point clouds"):
@@ -818,14 +883,75 @@ def tf_extraction(x_ds, name):
         simplex_trees_dict[label] = simplex_trees
         persistence_diagrams_dict[label] = persistence_diagrams
     
-    # Loop through simplex tree dictionary to create persistence images dictionary
+    # Loop through simplex tree dictionary to create persistence images list
     for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
-        persistence_images_dict[label] = generate_persistence_images(simplex_trees)
 
-    # Return dicitonaries
-    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_dict
+        # Generate batch of persistence images
+        persistence_images_batch = generate_persistence_images(simplex_trees)
+
+        # Add persistence images to output list
+        persistence_images_list.extend(persistence_images_batch)
+
+    # Return dicitonaries and list
+    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_list
 
 # ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
+
+# ---------------------------------------- CONCATENATION BASED FUSION CODE --------------------------------------------
+
+# Define fused_frame_generator class that generates concatenations of video frames and persistence images
+class fused_frame_generator:
+
+    # __init__ function to initialize instance attributes
+    def __init__(self, x_ds, pis_list):
+        self.x_ds = x_ds
+        self.pis_list = pis_list
+
+    # __call__ function that yields video frames with their respective label
+    def __call__(self):
+        
+        # Initialize index tracker
+        index = 0
+
+        # Loop through frames and labels within inputted dataset
+        for frames, label in self.x_ds:
+            
+            # Initialize list of concatenated frames
+            concatenated_frames = []
+
+            # Loop through frames
+            for frame in frames:
+                
+                # Define current persistence image with current index
+                cur_pi = self.pis_list[index]
+
+                # If current persistence image is "None," set current persistence image tensor to a tensor of desired shape filled with zeros
+                if cur_pi is None:
+                    cur_pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+
+                else:
+                    # Convert current persistence image to a tensor
+                    cur_pi_tensor = tf.convert_to_tensor(cur_pi, dtype = tf.float32)
+
+                    # Reshape tensor to desired shape
+                    cur_pi_tensor = tf.reshape(cur_pi_tensor, [height, width, 1])
+
+                # Concatenate video frame and current persistence image tensor
+                concatenated_frame = tf.concat([frame, cur_pi_tensor], axis = -1)
+
+                # Append concatenated frame to concatenated frames list
+                concatenated_frames.append(concatenated_frame)
+                
+                # Set index for next loop
+                index += 1
+
+            # Make concatenated frames list an array
+            concatenated_frames_array = np.array(concatenated_frames)
+
+            # Yield concatenated frames array and its respective label
+            yield concatenated_frames_array, label
+
+# ------------------------------------- END OF CONCATENATION BASED FUSION CODE ----------------------------------------
 
 if __name__ == "__main__":
     main()
