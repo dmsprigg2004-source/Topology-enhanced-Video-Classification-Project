@@ -1,9 +1,8 @@
 **/UCF101
-**/train
-**/test
-**/val
-**/History_Plots
-**/Confusion_Matrices
 **/.vscode
 **/.DS_Store
-**/env
+**/train/*
+**/test/*
+**/val/*
+**/History_Plots/*
+**/Confusion_Matrices/*
