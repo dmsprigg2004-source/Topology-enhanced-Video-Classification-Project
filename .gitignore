@@ -7,8 +7,5 @@
 **/History_Plots/*
 **/Confusion_Matrices/*
 
-!train/.gitkeep
-!test/.gitkeep
-!val/.gitkeep
 !History_Plots/.gitkeep
 !Confusion_Matrices/.gitkeep
