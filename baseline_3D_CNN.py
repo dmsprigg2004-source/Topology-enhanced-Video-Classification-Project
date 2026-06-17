@@ -34,17 +34,23 @@ from gudhi.representations import PersistenceImage
 import random
 
 # Defining test settings
-num_categories = 1
-splits = {"train": 35, "val": 5, "test": 10}
-epochs = 1
-height = 56
-width = 56
+num_categories = 20
+splits = {"train": 70, "val": 10, "test": 20}
+epochs = 20
+height = 112
+width = 112
 n_frames = 10
 batch_size = 8
 
+steps_per_epoch = (splits['train'] * num_categories) // batch_size
+
+validation_steps = (splits['val'] * num_categories) // batch_size
+
+print(steps_per_epoch, validation_steps)
+
 # Choose which test to run
-test_baseline_model = False
-test_concatenation_based_fusion = True
+test_baseline_model = True
+test_concatenation_based_fusion = False
 
 def main():
 
@@ -64,9 +70,9 @@ def main():
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
     # Get topological features from the datasets
-    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_persistence_images_list = tf_extraction(train_ds, "Training")
-    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_persistence_images_list = tf_extraction(val_ds, "Validation")
-    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_persistence_images_list = tf_extraction(test_ds, "Test")
+    # train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_persistence_images_list = tf_extraction(train_ds, "Training")
+    # val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_persistence_images_list = tf_extraction(val_ds, "Validation")
+    # test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_persistence_images_list = tf_extraction(test_ds, "Test")
 
     # Test baseline model if selected
     if test_baseline_model == True:
@@ -88,7 +94,7 @@ def main():
                     metrics = ['accuracy'])
         
         # Train the model and obtain model history using model.fit()
-        history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds)
+        history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
         
         # Call function to plot history of model training performance
         plot_history(history)
