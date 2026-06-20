@@ -41,9 +41,9 @@ width = 56
 n_frames = 10
 batch_size = 8
 
-# Choose which test to run
-test_baseline_model = True
-test_concatenation_based_fusion = True
+# Choose test from list
+tests = ["Baseline", "Concatenation"]
+chosen_test = tests[1]
 
 def main():
 
@@ -66,125 +66,13 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
-    # Get topological features from the datasets
-    train_persistence_images_list = tf_extraction(train_ds, "Training")
-    val_persistence_images_list = tf_extraction(val_ds, "Validation")
-    test_persistence_images_list = tf_extraction(test_ds, "Test")
-
     # Test baseline model if selected
-    if test_baseline_model == True:
+    if chosen_test == "Baseline":
+        test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
 
-        # Make versions of datasets that repeat for training
-        repeat_train_ds = train_ds.repeat().batch(batch_size)
-        repeat_val_ds = val_ds.repeat().batch(batch_size)
-
-        # Batch data into desired sizes
-        train_ds = train_ds.batch(batch_size)
-        val_ds = val_ds.batch(batch_size)
-        test_ds = test_ds.batch(batch_size)
-
-        # Define input shape
-        input_shape = (None, n_frames, height, width, 3)
-
-        # Call function to create the 3D CNN model
-        model = create_3D_CNN(train_ds, input_shape)
-
-        # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
-        model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                    optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), 
-                    metrics = ['accuracy'])
-        
-        # Train the model and obtain model history using model.fit()
-        history = model.fit(x = repeat_train_ds, epochs = epochs, validation_data = repeat_val_ds, steps_per_epoch = steps_per_epoch, 
-                            validation_steps = validation_steps)
-        
-        # Call function to plot history of model training performance
-        plot_history(history)
-
-        # Evaluate model to get accuracy and loss values
-        model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
-
-        # Obtain rounded model accuracy value
-        model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
-
-        # Use FrameGenerator class to obtain class labels from training data
-        fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
-        labels = list(fg.class_ids_for_name.keys())
-
-        # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
-        actual, predicted = get_actual_predicted_labels(train_ds, model)
-        plot_confusion_matrix(actual, predicted, labels, 'training')
-
-        # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
-        actual, predicted = get_actual_predicted_labels(test_ds, model)
-        plot_confusion_matrix(actual, predicted, labels, 'test')
-
-    # Test concatenation based fusion model if selected
-    elif test_concatenation_based_fusion == True:
-
-        # Define output signature
-        output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
-
-        # Generate training, validation and testing datasets
-        train_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(train_ds, train_persistence_images_list), 
-                                                                    output_signature = output_signature)
-        val_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(val_ds, val_persistence_images_list), 
-                                                                    output_signature = output_signature)
-        test_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(test_ds, test_persistence_images_list), 
-                                                                    output_signature = output_signature)
-
-        # Make versions of datasets that repeat for training
-        repeat_train_concatenated_frames = train_concatenated_frames.repeat().batch(batch_size)
-        repeat_val_concatenated_frames = val_concatenated_frames.repeat().batch(batch_size)
-
-        # Batch data into desired sizes
-        train_concatenated_frames = train_concatenated_frames.batch(batch_size)
-        val_concatenated_frames = val_concatenated_frames.batch(batch_size)
-        test_concatenated_frames = test_concatenated_frames.batch(batch_size)
-
-        # Define input shape
-        input_shape = (None, n_frames, height, width, 4)
-
-        # Call function to create the 3D CNN model
-        model = create_3D_CNN(train_concatenated_frames, input_shape)
-
-        # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
-        model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                      optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), metrics = ['accuracy'])
-
-        # Train the model and obtain model history using model.fit()
-        history = model.fit(x = repeat_train_concatenated_frames, epochs = epochs, validation_data = repeat_val_concatenated_frames, 
-                            steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
-
-        # Call function to plot history of model training performance
-        plot_history(history)
-
-        # Evaluate model to get accuracy and loss values
-        model_accuracy_and_loss = model.evaluate(test_concatenated_frames, return_dict=True)
-
-        # Obtain rounded model accuracy value
-        model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
-
-        # Use FrameGenerator class to obtain class labels from training data
-        fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
-        labels = list(fg.class_ids_for_name.keys())
-
-        # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
-        actual, predicted = get_actual_predicted_labels(train_concatenated_frames, model)
-        plot_confusion_matrix(actual, predicted, labels, 'training')
-
-        # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
-        actual, predicted = get_actual_predicted_labels(test_concatenated_frames, model)
-        plot_confusion_matrix(actual, predicted, labels, 'test')
-
-    # Call function to calculate precision and recall values
-    precision, recall = calculate_precision_recall(actual, predicted, labels)
-
-    # Call function to calculate F1 scores
-    F1_scores = calculate_F1_scores(precision, recall)
-
-    # Call function to print classificaiton metrics
-    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+    # Test concatenation based fusion if selected
+    elif chosen_test == "Concatenation":
+        test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
 
     return 
 
@@ -417,7 +305,6 @@ class FrameGenerator:
             yield video_frames, label
 
 # ------------------------------  END OF DATA LOADING AND PREPROCESSING CODE ----------------------------------------
-
 
 # ---------------------------------------  MODEL CREATION CODE ------------------------------------------------------
 
@@ -806,7 +693,7 @@ def generate_pds_sts(point_clouds):
 
         # Define number of points in point cloud
         num_points = point_cloud.shape[0]
-        
+
         # If point cloud has zero points, append a "None" value to lists and continue loop
         if num_points == 0:
             persistence_diagrams.append(None)
@@ -955,6 +842,143 @@ class fused_frame_generator:
             yield concatenated_frames_array, label
 
 # ------------------------------------- END OF CONCATENATION BASED FUSION CODE ----------------------------------------
+
+# ------------------------------------------------ TEST BASED CODE ----------------------------------------------------
+
+# Function to test baseline video classificaion model
+def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+
+    # Make versions of datasets that repeat for training
+    repeat_train_ds = train_ds.repeat().batch(batch_size)
+    repeat_val_ds = val_ds.repeat().batch(batch_size)
+
+    # Batch data into desired sizes
+    train_ds = train_ds.batch(batch_size)
+    val_ds = val_ds.batch(batch_size)
+    test_ds = test_ds.batch(batch_size)
+
+    # Define input shape
+    input_shape = (None, n_frames, height, width, 3)
+
+    # Call function to create the 3D CNN model
+    model = create_3D_CNN(train_ds, input_shape)
+
+    # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
+    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), 
+                metrics = ['accuracy'])
+    
+    # Train the model and obtain model history using model.fit()
+    history = model.fit(x = repeat_train_ds, epochs = epochs, validation_data = repeat_val_ds, steps_per_epoch = steps_per_epoch, 
+                        validation_steps = validation_steps)
+    
+    # Call function to plot history of model training performance
+    plot_history(history)
+
+    # Evaluate model to get accuracy and loss values
+    model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
+
+    # Obtain rounded model accuracy value
+    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+
+    # Use FrameGenerator class to obtain class labels from training data
+    fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
+    labels = list(fg.class_ids_for_name.keys())
+
+    # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
+    actual, predicted = get_actual_predicted_labels(train_ds, model)
+    plot_confusion_matrix(actual, predicted, labels, 'training')
+
+    # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
+    actual, predicted = get_actual_predicted_labels(test_ds, model)
+    plot_confusion_matrix(actual, predicted, labels, 'test')
+
+    # Call function to calculate precision and recall values
+    precision, recall = calculate_precision_recall(actual, predicted, labels)
+
+    # Call function to calculate F1 scores
+    F1_scores = calculate_F1_scores(precision, recall)
+
+    # Call function to print classificaiton metrics
+    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+
+    return
+
+# Function to test concatenation based fusion
+def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+
+    # Get topological features from the datasets
+    train_persistence_images_list = tf_extraction(train_ds, "Training")
+    val_persistence_images_list = tf_extraction(val_ds, "Validation")
+    test_persistence_images_list = tf_extraction(test_ds, "Test")
+    
+    # Define output signature
+    output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+
+    # Generate training, validation and testing datasets
+    train_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(train_ds, train_persistence_images_list), 
+                                                                output_signature = output_signature)
+    val_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(val_ds, val_persistence_images_list), 
+                                                                output_signature = output_signature)
+    test_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(test_ds, test_persistence_images_list), 
+                                                                output_signature = output_signature)
+
+    # Make versions of datasets that repeat for training
+    repeat_train_concatenated_frames = train_concatenated_frames.repeat().batch(batch_size)
+    repeat_val_concatenated_frames = val_concatenated_frames.repeat().batch(batch_size)
+
+    # Batch data into desired sizes
+    train_concatenated_frames = train_concatenated_frames.batch(batch_size)
+    val_concatenated_frames = val_concatenated_frames.batch(batch_size)
+    test_concatenated_frames = test_concatenated_frames.batch(batch_size)
+
+    # Define input shape
+    input_shape = (None, n_frames, height, width, 4)
+
+    # Call function to create the 3D CNN model
+    model = create_3D_CNN(train_concatenated_frames, input_shape)
+
+    # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
+    model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                    optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), metrics = ['accuracy'])
+
+    # Train the model and obtain model history using model.fit()
+    history = model.fit(x = repeat_train_concatenated_frames, epochs = epochs, validation_data = repeat_val_concatenated_frames, 
+                        steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
+
+    # Call function to plot history of model training performance
+    plot_history(history)
+
+    # Evaluate model to get accuracy and loss values
+    model_accuracy_and_loss = model.evaluate(test_concatenated_frames, return_dict=True)
+
+    # Obtain rounded model accuracy value
+    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+
+    # Use FrameGenerator class to obtain class labels from training data
+    fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
+    labels = list(fg.class_ids_for_name.keys())
+
+    # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
+    actual, predicted = get_actual_predicted_labels(train_concatenated_frames, model)
+    plot_confusion_matrix(actual, predicted, labels, 'training')
+
+    # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
+    actual, predicted = get_actual_predicted_labels(test_concatenated_frames, model)
+    plot_confusion_matrix(actual, predicted, labels, 'test')
+
+    # Call function to calculate precision and recall values
+    precision, recall = calculate_precision_recall(actual, predicted, labels)
+
+    # Call function to calculate F1 scores
+    F1_scores = calculate_F1_scores(precision, recall)
+
+    # Call function to print classificaiton metrics
+    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+
+    return
+
+# -------------------------------------------- END OF TEST BASED CODE -------------------------------------------------
 
 if __name__ == "__main__":
     main()
