@@ -33,17 +33,17 @@ import gudhi as gd
 from gudhi.representations import PersistenceImage
 
 # Defining test settings
-num_categories = 20
+num_categories = 1
 splits = {"train": 70, "val": 10, "test": 20}
-epochs = 20
-height = 112
-width = 112
+epochs = 1
+height = 56
+width = 56
 n_frames = 10
 batch_size = 8
 
 # Choose which test to run
 test_baseline_model = True
-test_concatenation_based_fusion = False
+test_concatenation_based_fusion = True
 
 def main():
 
@@ -67,9 +67,9 @@ def main():
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
     # Get topological features from the datasets
-    train_frames_dict, train_pc_dict, train_sts_dict, train_pds_dict, train_persistence_images_list = tf_extraction(train_ds, "Training")
-    val_frames_dict, val_pc_dict, val_sts_dict, val_pds_dict, val_persistence_images_list = tf_extraction(val_ds, "Validation")
-    test_frames_dict, test_pc_dict, test_sts_dict, test_pds_dict, test_persistence_images_list = tf_extraction(test_ds, "Test")
+    train_persistence_images_list = tf_extraction(train_ds, "Training")
+    val_persistence_images_list = tf_extraction(val_ds, "Validation")
+    test_persistence_images_list = tf_extraction(test_ds, "Test")
 
     # Test baseline model if selected
     if test_baseline_model == True:
@@ -118,15 +118,6 @@ def main():
         # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
         actual, predicted = get_actual_predicted_labels(test_ds, model)
         plot_confusion_matrix(actual, predicted, labels, 'test')
-
-        # Call function to calculate precision and recall values
-        precision, recall = calculate_precision_recall(actual, predicted, labels)
-
-        # Call function to calculate F1 scores
-        F1_scores = calculate_F1_scores(precision, recall)
-
-        # Call function to print classificaiton metrics
-        print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     # Test concatenation based fusion model if selected
     elif test_concatenation_based_fusion == True:
@@ -186,14 +177,14 @@ def main():
         actual, predicted = get_actual_predicted_labels(test_concatenated_frames, model)
         plot_confusion_matrix(actual, predicted, labels, 'test')
 
-        # Call function to calculate precision and recall values
-        precision, recall = calculate_precision_recall(actual, predicted, labels)
+    # Call function to calculate precision and recall values
+    precision, recall = calculate_precision_recall(actual, predicted, labels)
 
-        # Call function to calculate F1 scores
-        F1_scores = calculate_F1_scores(precision, recall)
+    # Call function to calculate F1 scores
+    F1_scores = calculate_F1_scores(precision, recall)
 
-        # Call function to print classificaiton metrics
-        print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+    # Call function to print classificaiton metrics
+    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     return 
 
@@ -879,7 +870,7 @@ def tf_extraction(x_ds, name):
         frames_dict[f"{label}.{count}"] = frames
         count += 1
     
-    # Initialize all output dictionaries and list
+    # Initialize all dictionaries and list
     point_cloud_dict = {}
     simplex_trees_dict = {}
     persistence_diagrams_dict = {}
@@ -905,7 +896,7 @@ def tf_extraction(x_ds, name):
         persistence_images_list.extend(persistence_images_batch)
 
     # Return dicitonaries and list
-    return frames_dict, point_cloud_dict, simplex_trees_dict, persistence_diagrams_dict, persistence_images_list
+    return persistence_images_list
 
 # ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
 
