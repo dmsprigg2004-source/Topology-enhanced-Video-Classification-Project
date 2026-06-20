@@ -74,7 +74,11 @@ def main():
     # Test baseline model if selected
     if test_baseline_model == True:
 
-        # Create batches of the data
+        # Make versions of datasets that repeat for training
+        repeat_train_ds = train_ds.repeat().batch(batch_size)
+        repeat_val_ds = val_ds.repeat().batch(batch_size)
+
+        # Batch data into desired sizes
         train_ds = train_ds.batch(batch_size)
         val_ds = val_ds.batch(batch_size)
         test_ds = test_ds.batch(batch_size)
@@ -87,11 +91,12 @@ def main():
 
         # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
         model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                    optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
+                    optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), 
                     metrics = ['accuracy'])
         
         # Train the model and obtain model history using model.fit()
-        history = model.fit(x = train_ds, epochs = epochs, validation_data = val_ds, steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
+        history = model.fit(x = repeat_train_ds, epochs = epochs, validation_data = repeat_val_ds, steps_per_epoch = steps_per_epoch, 
+                            validation_steps = validation_steps)
         
         # Call function to plot history of model training performance
         plot_history(history)
@@ -137,6 +142,10 @@ def main():
         test_concatenated_frames = tf.data.Dataset.from_generator(fused_frame_generator(test_ds, test_persistence_images_list), 
                                                                     output_signature = output_signature)
 
+        # Make versions of datasets that repeat for training
+        repeat_train_concatenated_frames = train_concatenated_frames.repeat().batch(batch_size)
+        repeat_val_concatenated_frames = val_concatenated_frames.repeat().batch(batch_size)
+
         # Batch data into desired sizes
         train_concatenated_frames = train_concatenated_frames.batch(batch_size)
         val_concatenated_frames = val_concatenated_frames.batch(batch_size)
@@ -150,11 +159,11 @@ def main():
 
         # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
         model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                    optimizer = keras.optimizers.Adam(learning_rate = 0.0001), 
-                    metrics = ['accuracy'])
+                      optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), metrics = ['accuracy'])
 
         # Train the model and obtain model history using model.fit()
-        history = model.fit(x = train_concatenated_frames, epochs = epochs, validation_data = val_concatenated_frames)
+        history = model.fit(x = repeat_train_concatenated_frames, epochs = epochs, validation_data = repeat_val_concatenated_frames, 
+                            steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
 
         # Call function to plot history of model training performance
         plot_history(history)
@@ -881,7 +890,7 @@ def tf_extraction(x_ds, name):
         point_cloud_dict[label] = generate_point_clouds(frames)
 
     # Loop through point cloud dictionary to create simplex tree and persistence diagram dictionaries
-    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence images"):
+    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence diagrams"):
         simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
         simplex_trees_dict[label] = simplex_trees
         persistence_diagrams_dict[label] = persistence_diagrams
