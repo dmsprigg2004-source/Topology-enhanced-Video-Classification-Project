@@ -8,4 +8,4 @@ Features:
 
     - Baseline 3D CNN video classification model implemented from tensorflow.org with alterations done to adapt functionality for personal needs
     - Extraction of topological features from data
-    - Concatenation-based feature fusion
+    - Two implementations of concatenation-based feature fusion (one done by separating colour channels and one that keeps them intact)
