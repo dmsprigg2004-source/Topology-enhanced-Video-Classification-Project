@@ -4,13 +4,20 @@ File by file expaination:
 
 baseline_model.py:
 
-    - Baseline 3D CNN video classification model implemented from tensorflow.org with alterations done to adapt functionality for personal needs
+    - Tests baseline 3D CNN video classification model
 
 concatenation_fusion.py:
 
-    - Same model as baseline
-    - Extraction of topological features from data
-    - Two implimentations of concatenation-based feature fusion. One done by separating colour channels and one that keeps them intact
+    - Extracts topological features from data
+    - Contains two implimentations of concatenation-based feature fusion. One done by separating colour channels and one that keeps them intact
+
+utils.py:
+
+    Includes several helper functions which together can do the following:
+
+        - Load and preprocess video data
+        - Impliment baseline 3D CNN video classification model
+        - Assess model performance with standard classification metrics
 
 Confusion_Matrices/History_Plots:
 
