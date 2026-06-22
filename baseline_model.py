@@ -62,8 +62,6 @@ def main():
 
     return 
 
-# ------------------------------------------------ TEST BASED CODE ----------------------------------------------------
-
 # Function to test baseline video classificaion model
 def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
 
@@ -122,8 +120,6 @@ def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds
     print_classification_metrics(model_accuracy, precision, recall, F1_scores)
 
     return
-
-# -------------------------------------------- END OF TEST BASED CODE -------------------------------------------------
 
 if __name__ == "__main__":
     main()

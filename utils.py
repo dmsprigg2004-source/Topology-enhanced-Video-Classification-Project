@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tqdm import tqdm
 import random
-import pathlib
 import cv2
 import einops
 import numpy as np
@@ -28,18 +26,11 @@ import os
 from pathlib import Path
 import shutil
 import copy
-from gtda.images import ImageToPointCloud
-import gudhi as gd
-from gudhi.representations import PersistenceImage
 
 # Defining test settings
 num_categories = 1
-splits = {"train": 70, "val": 10, "test": 20}
 height = 112
 width = 112
-epochs = 1
-n_frames = 10
-batch_size = 8
 
 # ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
 
