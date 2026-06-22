@@ -1,9 +1,7 @@
 **/UCF101
 **/.vscode
 **/.DS_Store
-**/train/*
-**/test/*
-**/val/*
+**/__pycache__
 **/History_Plots/*
 **/Confusion_Matrices/*
 
