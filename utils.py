@@ -27,12 +27,29 @@ from pathlib import Path
 import shutil
 import copy
 
-# Defining test settings
-num_categories = 1
-height = 112
-width = 112
-
 # ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
+
+# Function that defines and returns test settings
+def get_test_settings():
+
+    # Define desired test settings
+    num_categories = 1
+    splits = {"train": 70, "val": 10, "test": 20}
+    epochs = 1
+    height = 56
+    width = 56
+    n_frames = 10
+    batch_size = 8
+
+    # Calculate steps per epoch and validation steps
+    steps_per_epoch = (splits['train'] * num_categories) // batch_size
+    validation_steps = (splits['val'] * num_categories) // batch_size
+
+    # Return test settings
+    return num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps
+
+# Call above function to get test settings
+num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
 
 # Function that gets a list of files to be used in either training, validation or testing as well as a dictionary 
 # specifying which files are unused

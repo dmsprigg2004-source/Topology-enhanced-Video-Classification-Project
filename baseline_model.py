@@ -26,24 +26,15 @@ from utils import plot_confusion_matrix
 from utils import calculate_precision_recall
 from utils import calculate_F1_scores
 from utils import print_classification_metrics
+from utils import get_test_settings
 
-# Defining test settings
-num_categories = 1
-splits = {"train": 70, "val": 10, "test": 20}
-height = 112
-width = 112
-epochs = 1
-n_frames = 10
-batch_size = 8
+# Get test settings
+num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
 
 def main():
 
     # Defining path to video data
     UCF101_dir = pathlib.Path('./UCF101')
-
-    # Calculate steps per epoch and validation steps
-    steps_per_epoch = (splits['train'] * num_categories) // batch_size
-    validation_steps = (splits['val'] * num_categories) // batch_size
     
     # Create subset directories
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
