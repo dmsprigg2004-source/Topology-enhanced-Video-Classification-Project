@@ -11,6 +11,10 @@ concatenation_fusion.py:
     - Extracts topological features from data
     - Contains two implimentations of concatenation-based feature fusion. One done by separating colour channels and one that keeps them intact
 
+multi_branch_fusion.py:
+
+    - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for raw image frames, and another for persistence images. These are evaluated by the model separately and then concatenated to create a single output.
+
 utils.py:
 
     Includes several helper functions which together can do the following:
