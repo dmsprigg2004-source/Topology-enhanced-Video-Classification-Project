@@ -249,7 +249,7 @@ class Frame_PI_Generator:
             video_frames = frames_from_video_file(path, self.n_frames) 
 
             # Obtain persistence images based on video frames and store them to a list
-            point_clouds = generate_point_clouds(video_frames)
+            point_clouds = generate_point_clouds(video_frames, "Multi-Branch Fusion")
             simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
             persistence_images = generate_persistence_images(simplex_trees)
 

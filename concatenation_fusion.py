@@ -71,7 +71,7 @@ def main():
 # ------------------------------------ TOPOLOGICAL FEATURE EXTRACTION CODE ---------------------------------------------
 
 # Function that generates point clouds from the data
-def generate_point_clouds(video_frames):
+def generate_point_clouds(video_frames, chosen_test):
 
     # Create object for ImageToPointCloud class
     itpc = ImageToPointCloud()
@@ -193,7 +193,7 @@ def tf_extraction_ds(x_ds, name):
 
     # Loop through frame dictionary to create point cloud dictionary
     for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Generating point clouds"):
-        point_cloud_dict[label] = generate_point_clouds(frames)
+        point_cloud_dict[label] = generate_point_clouds(frames, chosen_test)
 
     # Loop through point cloud dictionary to create simplex tree and persistence diagram dictionaries
     for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence diagrams"):
@@ -218,7 +218,7 @@ def tf_extraction_list(frame_list, name):
 
     # Generate point clouds
     print(f"{name} - Genrating point clouds...")
-    point_clouds = generate_point_clouds(frame_list)
+    point_clouds = generate_point_clouds(frame_list, chosen_test)
     print("Done")
 
     # Generate simplex trees and persistence diagrams
