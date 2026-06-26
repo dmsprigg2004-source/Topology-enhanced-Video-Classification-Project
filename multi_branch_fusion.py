@@ -188,8 +188,8 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         else:
             output_2 = x
 
-    # Concatenate outputs
-    output = concatenate([output_1, output_2])
+    # Average the outputs
+    output = layers.Average()([output_1, output_2])
 
     # Define model using starting and ending points
     model = keras.Model(inputs=[x_ds_input, pi_ds_input], outputs = output)
