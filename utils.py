@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 import shutil
 import copy
+import math
 
 # ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
 
@@ -33,12 +34,12 @@ import copy
 def get_test_settings():
 
     # Define desired test settings
-    num_categories = 1
+    num_categories = 5
     splits = {"train": 70, "val": 10, "test": 20}
-    epochs = 1
-    height = 56
-    width = 56
-    n_frames = 10
+    epochs = 40
+    height = 112
+    width = 112
+    n_frames = 16
     batch_size = 8
 
     # Calculate steps per epoch and validation steps
@@ -174,7 +175,7 @@ def format_frames(frame, output_size):
     return frame
 
 # Function that extracts frames from a video file
-def frames_from_video_file(video_path, n_frames, output_size = (height,width), frame_step = 15):
+def frames_from_video_file(video_path, n_frames, output_size = (height,width)):
 
     # Initalize output list 
     result = []
@@ -182,20 +183,28 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width), f
     # Initalize new VideoCapture object
     src = cv2.VideoCapture(str(video_path))  
 
+    # Define length needed for a frame step of 15
+    need_length = 1 + (n_frames - 1) * 15
+
     # Get number of frames in video
     video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    # Define variable for needed number of frames
-    need_length = 1 + (n_frames - 1) * frame_step
+    # If video length is less than what is needed for a frame step of 15, calculate new frame step
+    if video_length < need_length:
 
-    # If needed number of frames is longer than video length, set start to 0
-    if need_length > video_length:
+        # Calculate valid frame step
+        frame_step = max(1, math.floor(video_length / n_frames))
+
+        # Define start as first frame
         start = 0
 
-    # Else, define a maximum starting position and set start to a random number between that and 0
     else:
+        # Set frame step to 15
+        frame_step = 15
+
+        # Define start to a random position within a valid range
         max_start = video_length - need_length
-        start = random.randint(0, max_start + 1)
+        start = random.randint(0, max_start)
 
     # Set starting position using start variable
     src.set(cv2.CAP_PROP_POS_FRAMES, start)
@@ -208,6 +217,10 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width), f
 
     # Loop one time for each remaining needed frame
     for _ in range(n_frames - 1):
+        
+        # Initialize empty lists
+        ret_list = []
+        frame_list = []
 
         # Loop a specified number of times to skip frames
         for _ in range(frame_step):
@@ -215,12 +228,22 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width), f
             # Read video frame
             ret, frame = src.read()
 
-        # If frame was extracted, format and add to result, otherwise add fully black image to result
-        if ret:
-            frame = format_frames(frame, output_size)
-            result.append(frame)
-        else:
-            result.append(np.zeros_like(result[0]))
+            # Append values to lists
+            ret_list.append(ret)
+            frame_list.append(frame)
+
+        # Loop once for each frame just read
+        for i in range(frame_step):
+
+            # If current frame was extracted, format, append to result, and break the loop
+            if ret_list[len(ret_list) - 1 - i] == True:
+                frame = format_frames(frame_list[i], output_size)
+                result.append(frame)
+                break
+            
+            # If no frames were successfully extracted, add fully black image to result
+            if i == frame_step - 1:
+                result.append(np.zeros_like(result[0]))
 
     # Release VideoCapture object
     src.release()
