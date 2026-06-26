@@ -13,7 +13,7 @@ concatenation_fusion.py:
 
 multi_branch_fusion.py:
 
-    - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for raw image frames, and another for persistence images. These are evaluated by the model separately and then concatenated to create a single output.
+    - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for raw image frames, and another for persistence images. These are evaluated by the model separately and then averaged to create a single output.
 
 utils.py:
 
