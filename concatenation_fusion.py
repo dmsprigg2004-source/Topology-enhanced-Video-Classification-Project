@@ -39,7 +39,7 @@ num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_e
 
 # Choose test from list
 tests = ["Concatenation", "3 Channel Concatenation"]
-chosen_test = tests[1]
+chosen_test = tests[0]
 
 def main():
 
@@ -128,9 +128,9 @@ def generate_pds_sts(point_clouds):
             simplex_trees.append(None)
             continue
         
-        # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
-        if num_points > 1000:
-            indices = np.random.choice(range(0, num_points), 1000)
+        # If point cloud has more than 3000 points, resize to 3000 by choosing 3000 points at random
+        if num_points > 3000:
+            indices = np.random.choice(range(0, num_points - 1), 3000)
             point_cloud = point_cloud[indices]
 
         # Create a simplex tree from point cloud
