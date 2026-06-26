@@ -237,7 +237,7 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width)):
 
             # If current frame was extracted, format, append to result, and break the loop
             if ret_list[len(ret_list) - 1 - i] == True:
-                frame = format_frames(frame_list[i], output_size)
+                frame = format_frames(frame_list[len(frame_list) - 1 - i], output_size)
                 result.append(frame)
                 break
             
