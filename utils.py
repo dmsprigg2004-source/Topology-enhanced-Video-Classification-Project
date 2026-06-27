@@ -116,9 +116,6 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
     # Loop through categories in UCF101
     for category in os.listdir(UCF101_dir):
 
-        # Add 1 to count
-        category_count += 1
-
         # Define path to category
         category_path = os.path.join(UCF101_dir, category)
 
@@ -128,6 +125,9 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
 
             for video in os.listdir(category_path):
                 category_dict[category].append(video)
+
+            # Add 1 to count
+            category_count += 1
 
         # Once reached specified category count, break
         if category_count == num_categories:
