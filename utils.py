@@ -538,6 +538,8 @@ def plot_confusion_matrix(actual, predicted, labels, ds_type):
     ax.set_title('Confusion matrix of action recognition for ' + ds_type)
     ax.set_xlabel('Predicted Action')
     ax.set_ylabel('Actual Action')
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
     plt.xticks(rotation=90)
     plt.yticks(rotation=0)
     ax.xaxis.set_ticklabels(labels)
