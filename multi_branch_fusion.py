@@ -19,7 +19,7 @@ import numpy as np
 import tensorflow as tf
 import keras
 from keras import layers
-from CBAM_keras.models.attention_module import cbam_block
+from CBAM_keras.attention_module import cbam_block
 
 from utils import create_subset_dirs
 from utils import FrameGenerator
