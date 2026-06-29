@@ -19,7 +19,7 @@ import numpy as np
 import tensorflow as tf
 import keras
 from keras import layers
-from keras.layers import concatenate
+from CBAM_keras.models.attention_module import cbam_block
 
 from utils import create_subset_dirs
 from utils import FrameGenerator
@@ -41,6 +41,10 @@ from concatenation_fusion import generate_persistence_images
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
+
+# Choose test from list
+tests = ["Baseline Multi-Branch", "Multi-Branch with CBAM"]
+chosen_test = tests[1]
 
 def main():
 
@@ -156,21 +160,40 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
 
         # Add residual block with a specified number of filters and specific kernel size
         x = add_residual_block(x, 16, (3, 3, 3))
+
+        # If specific test is chosen, apply attention mechanism
+        if chosen_test == "Multi-Branch with CBAM":
+            x = cbam_block(x)
+
         # Resize video to one quarter of its current hight and width
         x = ResizeVideo(height // 4, width // 4)(x)
 
         # Add residual block with a specified number of filters and specific kernel size
         x = add_residual_block(x, 32, (3, 3, 3))
+
+        # If specific test is chosen, apply attention mechanism
+        if chosen_test == "Multi-Branch with CBAM":
+            x = cbam_block(x)
+
         # Resize video to one eighth of its current height and width
         x = ResizeVideo(height // 8, width // 8)(x)
 
         # Add residual block with a specified number of filters and specific kernel size
         x = add_residual_block(x, 64, (3, 3, 3))
+
+        # If specific test is chosen, apply attention mechanism
+        if chosen_test == "Multi-Branch with CBAM":
+            x = cbam_block(x)
+
         # Resize video to one sixteenth of its current height and width
         x = ResizeVideo(height // 16, width // 16)(x)
 
         # Add residual block with a specified number of filters and specific kernel size
         x = add_residual_block(x, 128, (3, 3, 3))
+
+        # If specific test is chosen, apply attention mechanism
+        if chosen_test == "Multi-Branch with CBAM":
+            x = cbam_block(x)
 
         # Add layer that downsamples model data
         x = layers.GlobalAveragePooling3D()(x)
