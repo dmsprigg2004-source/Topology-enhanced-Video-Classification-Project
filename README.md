@@ -14,6 +14,7 @@ concatenation_fusion.py:
 multi_branch_fusion.py:
 
     - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for raw image frames, and another for persistence images. These are evaluated by the model separately and then averaged to create a single output.
+    - Contains a secondary test that uses Convolutional Block Attention Module (CBAM)
 
 utils.py:
 
@@ -22,6 +23,11 @@ utils.py:
         - Load and preprocess video data
         - Impliment baseline 3D CNN video classification model
         - Assess model performance with standard classification metrics
+
+CBAM_keras:
+    
+    - Contains a license crediting original author of CBAM-keras
+    - Contains attention_module.py which implements both spatial and channel attention modules (the code was altered to work with 3d tensors)
 
 Confusion_Matrices/History_Plots:
 
