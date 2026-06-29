@@ -1,5 +1,14 @@
 # Topology-enhanced Video Classification Project
 
+The purpose of this project is to explore various ways of incorporating topology into a baseline video classification model for enhanced performance.
+
+Current tests implemented:
+
+    - Concatenation based fusion with persistence images
+    - Concatenation based fusion with one persistence image for each colour channel
+    - A multi-branch architecture separating raw video frames and persistence images which averages their predictions at the end of the model
+    - A multi-branch architecture that implements Convolutional Block Attention Module (CBAM)
+
 File by file expaination:
 
 baseline_model.py:
