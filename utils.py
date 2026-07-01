@@ -34,9 +34,9 @@ import math
 def get_test_settings():
 
     # Define desired test settings
-    num_categories = 5
+    num_categories = 30
     splits = {"train": 70, "val": 10, "test": 20}
-    epochs = 40
+    epochs = 100
     height = 112
     width = 112
     n_frames = 16
@@ -353,7 +353,7 @@ class ResidualMain(keras.layers.Layer):
     def call(self, x):
         return self.seq(x)
     
-    # Define class that updates a branches shape to a specified size
+# Define class that updates a branches shape to a specified size
 class Project(keras.layers.Layer):
 
     # __init__ function to initialize instance attributes
@@ -372,7 +372,7 @@ class Project(keras.layers.Layer):
     def call(self, x):
         return self.seq(x)
     
-    # Function that creates a residual block
+# Function that creates a residual block
 def add_residual_block(input, filters, kernel_size):
 
     # Create the main branch of the residual block and save it to a variable
@@ -424,7 +424,7 @@ class ResizeVideo(keras.layers.Layer):
         # Return videos
         return videos
     
-    # Function that creates a 3D CNN model using a training dataset and a specified input shape
+# Function that creates a 3D CNN model using a training dataset and a specified input shape
 def create_3D_CNN(x_ds, input_shape):
 
     # Create input layer with input shape and copy to "x" variable
@@ -476,6 +476,10 @@ def create_3D_CNN(x_ds, input_shape):
 
     # Return model
     return model
+
+# Define function that returns an early stoppage callback which monitors validation loss metric
+def early_stoppage():
+    return keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.05, patience=5, restore_best_weights=True, start_from_epoch=20)
 
 # -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
 

@@ -27,6 +27,7 @@ from utils import calculate_precision_recall
 from utils import calculate_F1_scores
 from utils import print_classification_metrics
 from utils import get_test_settings
+from utils import early_stoppage
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
@@ -48,13 +49,16 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
+    # Obtain early stoppage callback
+    callback = early_stoppage()
+
     # Test baseline model
-    test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
+    test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     return 
 
 # Function to test baseline video classificaion model
-def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Make versions of datasets that repeat for training
     repeat_train_ds = train_ds.repeat().batch(batch_size)
@@ -78,7 +82,7 @@ def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds
     
     # Train the model and obtain model history using model.fit()
     history = model.fit(x = repeat_train_ds, epochs = epochs, validation_data = repeat_val_ds, steps_per_epoch = steps_per_epoch, 
-                        validation_steps = validation_steps)
+                        validation_steps = validation_steps, callbacks=[callback])
     
     # Call function to plot history of model training performance
     plot_history(history)
