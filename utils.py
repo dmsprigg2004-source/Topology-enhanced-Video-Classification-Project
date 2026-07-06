@@ -479,7 +479,7 @@ def create_3D_CNN(x_ds, input_shape):
 
 # Define function that returns an early stoppage callback which monitors validation loss metric
 def early_stoppage():
-    return keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.05, patience=5, restore_best_weights=True, start_from_epoch=20)
+    return keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.025, patience=5, restore_best_weights=True, start_from_epoch=30)
 
 # -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
 

@@ -33,6 +33,7 @@ from utils import calculate_precision_recall
 from utils import calculate_F1_scores
 from utils import print_classification_metrics
 from utils import get_test_settings
+from utils import early_stoppage
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
@@ -58,13 +59,16 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
+    # Obtain early stoppage callback
+    callback = early_stoppage()
+
     # Test concatenation based fusion if selected
     if chosen_test == "Concatenation":
-        test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
+        test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     # Test 3 channel concatenation based fusion if selected
     elif chosen_test == "3 Channel Concatenation":
-        test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
+        test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     return 
 
@@ -128,9 +132,9 @@ def generate_pds_sts(point_clouds):
             simplex_trees.append(None)
             continue
         
-        # If point cloud has more than 3000 points, resize to 3000 by choosing 3000 points at random
-        if num_points > 3000:
-            indices = np.random.choice(range(0, num_points - 1), 3000)
+        # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
+        if num_points > 1000:
+            indices = np.random.choice(range(0, num_points - 1), 1000)
             point_cloud = point_cloud[indices]
 
         # Create a simplex tree from point cloud
@@ -408,7 +412,7 @@ class Three_channel_concatenated_frame_generator:
 # ------------------------------------------------ TEST BASED CODE ----------------------------------------------------
 
 # Function to test concatenation based fusion
-def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Get topological features from the datasets
     train_persistence_images_list = tf_extraction_ds(train_ds, "Training")
@@ -447,7 +451,7 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
 
     # Train the model and obtain model history using model.fit()
     history = model.fit(x = repeat_train_concatenated_frames, epochs = epochs, validation_data = repeat_val_concatenated_frames, 
-                        steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
+                        steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, callbacks=[callback])
 
     # Call function to plot history of model training performance
     plot_history(history)
@@ -482,7 +486,7 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
     return
 
 # Function to test 3 channel concatenation based fusion
-def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Split frames into images representing single colour channels
     red_train_list, green_train_list, blue_train_list = split_frames(train_ds)
@@ -536,7 +540,7 @@ def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps,
 
     # Train the model and obtain model history using model.fit()
     history = model.fit(x = repeat_train_concatenated_frames, epochs = epochs, validation_data = repeat_val_concatenated_frames, 
-                        steps_per_epoch = steps_per_epoch, validation_steps = validation_steps)
+                        steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, callbacks=[callback])
 
     # Call function to plot history of model training performance
     plot_history(history)
