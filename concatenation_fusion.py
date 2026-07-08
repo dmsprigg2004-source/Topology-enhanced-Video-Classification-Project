@@ -122,71 +122,46 @@ def generate_point_clouds(video_frames, chosen_test):
     # Return point clouds
     return point_clouds
 
-# Function that generates persistence diagrams and simplex trees from point clouds
-def generate_pds_sts(point_clouds):
+# Function that generates a simplex tree from a point cloud
+def generate_st(point_cloud):
 
-    # Initialize lists of persistence diagrams and simplex trees
-    # persistence_diagrams = []
-    simplex_trees = []
+    # Define number of points in point cloud
+    num_points = point_cloud.shape[0]
+
+    # If point cloud has zero points, return "None"
+    if num_points == 0:
+        return None
     
-    # Loop through each point cloud in the input
-    for point_cloud in point_clouds:
+    # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
+    if num_points > 1000:
+        indices = np.random.choice(range(0, num_points - 1), 1000)
+        point_cloud = point_cloud[indices]
 
-        # Define number of points in point cloud
-        num_points = point_cloud.shape[0]
+    # Create a simplex tree from point cloud
+    simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
 
-        # If point cloud has zero points, append a "None" value to lists and continue loop
-        if num_points == 0:
-            # persistence_diagrams.append(None)
-            simplex_trees.append(None)
-            continue
-        
-        # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
-        if num_points > 1000:
-            indices = np.random.choice(range(0, num_points - 1), 1000)
-            point_cloud = point_cloud[indices]
+    # Create persistence diagram from simplex tree
+    persistence_diagram = simplex_tree.persistence()
 
-        # Create a simplex tree from point cloud
-        simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
+    # Return simplex tree
+    return simplex_tree
 
-        # Create persistence diagram from simplex tree
-        persistence_diagram = simplex_tree.persistence()
+# Function that generates a persistence image from a simplex tree
+def generate_persistence_image(simplex_tree):
 
-        # Append persistence diagram to list
-        # persistence_diagrams.append(persistence_diagram)
+    # If tree has "None" value, return None
+    if simplex_tree is None:
+        return None
 
-        # Append simplex tree to list
-        simplex_trees.append(simplex_tree)
+    # Create persistence image
+    persistence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
+                                    im_range=[0,18,0,18], resolution=[height,width])
+    persistence_image = persistence_image.fit_transform([simplex_tree.persistence_intervals_in_dimension(1)])
 
-    # Return lists
-    return simplex_trees#, persistence_diagrams
+    # Return persistence image
+    return persistence_image
 
-# Function that generates persistence images from the data
-def generate_persistence_images(simplex_trees):
-
-    # Initalize list of persistence images
-    persistence_images = []
-
-    # Loop through inputted simplex trees
-    for tree in simplex_trees:
-
-        # If tree has "None" value, append None to list and continue
-        if tree is None:
-            persistence_images.append(None)
-            continue
-
-        # Create persistence image
-        persitence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
-                                        im_range=[0,18,0,18], resolution=[height,width])
-        persitence_image = persitence_image.fit_transform([tree.persistence_intervals_in_dimension(1)])
-
-        # Append image to list
-        persistence_images.append(persitence_image)
-
-    # Return persistence images
-    return persistence_images
-
-# Function that takes a dataset and returns topological features of the data
+# Function that takes a dataset and returns a list of persistence images
 def tf_extraction_ds(x_ds, name):
     
     # Initialize dictionary and count variable
@@ -198,51 +173,56 @@ def tf_extraction_ds(x_ds, name):
         frames_dict[f"{label}.{count}"] = frames
         count += 1
     
-    # Initialize all dictionaries and list
-    point_cloud_dict = {}
-    simplex_trees_dict = {}
-    #persistence_diagrams_dict = {}
+    # Initialize lists
+    point_cloud_list = []
+    simplex_trees_list = []
     persistence_images_list = []
 
-    # Loop through frame dictionary to create point cloud dictionary
+    # Loop through frame dictionary to generate point cloud list
     for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Generating point clouds"):
-        point_cloud_dict[label] = generate_point_clouds(frames, chosen_test)
+        point_cloud_list.extend(generate_point_clouds(frames, chosen_test))
 
-    # Loop through point cloud dictionary to create simplex tree and persistence diagram dictionaries
-    for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence diagrams"):
-        #simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
-        simplex_trees = generate_pds_sts(point_clouds)
-        simplex_trees_dict[label] = simplex_trees
-        #persistence_diagrams_dict[label] = persistence_diagrams
+    # Loop through point cloud list to generate simplex tree list
+    for point_cloud in tqdm(point_cloud_list, desc= f"{name} - Generating simplex trees"):
+        simplex_tree = generate_st(point_cloud)
+        simplex_trees_list.append(simplex_tree)
     
-    # Loop through simplex tree dictionary to create persistence images list
-    for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
+    # Loop through simplex tree list to generate persistence images list
+    for simplex_tree in tqdm(simplex_trees_list, desc= f"{name} - Generating persistence images"):
 
-        # Generate batch of persistence images
-        persistence_images_batch = generate_persistence_images(simplex_trees)
+        # Generate persistence image
+        persistence_image = generate_persistence_image(simplex_tree)
 
-        # Add persistence images to output list
-        persistence_images_list.extend(persistence_images_batch)
+        # Add persistence image to output list
+        persistence_images_list.append(persistence_image)
 
-    # Return dicitonaries and list
+    # Return persistence images list
     return persistence_images_list
 
-# Function that takes a list of frames and returns topological features of the data
+# Function that takes a list of frames and returns a list of persistence images
 def tf_extraction_list(frame_list, name):
+
+    # Initialize lists
+    simplex_trees_list = []
+    persistence_images_list = []
 
     # Generate point clouds
     print(f"{name} - Genrating point clouds...")
     point_clouds = generate_point_clouds(frame_list, chosen_test)
     print("Done")
 
-    # Generate simplex trees and persistence diagrams
-    print(f"{name} - Generating simplex trees and pesistence diagrams...")
-    simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+    # Generate simplex trees 
+    print(f"{name} - Generating simplex trees...")
+    for point_cloud in point_clouds:
+        simplex_tree = generate_st(point_cloud)
+        simplex_trees_list.append(simplex_tree)
     print("Done")
 
     # Generate persistence images
     print(f"{name} - Generating persistence images...")
-    persistence_images_list = generate_persistence_images(simplex_trees)
+    for tree in simplex_trees_list:
+        persistence_image = generate_persistence_image(tree)
+        persistence_images_list.append(persistence_image)
     print("Done")
 
     # Return list of persistence images
