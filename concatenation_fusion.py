@@ -117,7 +117,7 @@ def generate_point_clouds(video_frames, chosen_test):
 def generate_pds_sts(point_clouds):
 
     # Initialize lists of persistence diagrams and simplex trees
-    persistence_diagrams = []
+    # persistence_diagrams = []
     simplex_trees = []
     
     # Loop through each point cloud in the input
@@ -128,7 +128,7 @@ def generate_pds_sts(point_clouds):
 
         # If point cloud has zero points, append a "None" value to lists and continue loop
         if num_points == 0:
-            persistence_diagrams.append(None)
+            # persistence_diagrams.append(None)
             simplex_trees.append(None)
             continue
         
@@ -144,13 +144,13 @@ def generate_pds_sts(point_clouds):
         persistence_diagram = simplex_tree.persistence()
 
         # Append persistence diagram to list
-        persistence_diagrams.append(persistence_diagram)
+        # persistence_diagrams.append(persistence_diagram)
 
         # Append simplex tree to list
         simplex_trees.append(simplex_tree)
 
     # Return lists
-    return simplex_trees, persistence_diagrams
+    return simplex_trees#, persistence_diagrams
 
 # Function that generates persistence images from the data
 def generate_persistence_images(simplex_trees):
@@ -192,7 +192,7 @@ def tf_extraction_ds(x_ds, name):
     # Initialize all dictionaries and list
     point_cloud_dict = {}
     simplex_trees_dict = {}
-    persistence_diagrams_dict = {}
+    #persistence_diagrams_dict = {}
     persistence_images_list = []
 
     # Loop through frame dictionary to create point cloud dictionary
@@ -201,9 +201,10 @@ def tf_extraction_ds(x_ds, name):
 
     # Loop through point cloud dictionary to create simplex tree and persistence diagram dictionaries
     for label, point_clouds in tqdm(point_cloud_dict.items(), desc= f"{name} - Generating simplex trees and pesistence diagrams"):
-        simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+        #simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
+        simplex_trees = generate_pds_sts(point_clouds)
         simplex_trees_dict[label] = simplex_trees
-        persistence_diagrams_dict[label] = persistence_diagrams
+        #persistence_diagrams_dict[label] = persistence_diagrams
     
     # Loop through simplex tree dictionary to create persistence images list
     for label, simplex_trees in tqdm(simplex_trees_dict.items(), desc= f"{name} - Generating persistence images"):
