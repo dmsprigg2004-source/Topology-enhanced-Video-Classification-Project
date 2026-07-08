@@ -28,9 +28,14 @@ from utils import calculate_F1_scores
 from utils import get_test_settings
 from utils import early_stoppage
 from utils import create_classification_metrics_spreadsheet
+from utils import save_results
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
+
+# Choose whether to save results to folder with specific name
+save_output = True
+results_file_name = "test"
 
 def main():
 
@@ -54,6 +59,10 @@ def main():
 
     # Test baseline model
     test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
+
+    # Save results to folder if wanted
+    if save_output:
+        save_results(results_file_name)
 
     return 
 

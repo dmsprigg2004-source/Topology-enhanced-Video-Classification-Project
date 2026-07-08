@@ -34,6 +34,7 @@ from utils import calculate_F1_scores
 from utils import get_test_settings
 from utils import early_stoppage
 from utils import create_classification_metrics_spreadsheet
+from utils import save_results
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
@@ -41,6 +42,10 @@ num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_e
 # Choose test from list
 tests = ["Concatenation", "3 Channel Concatenation"]
 chosen_test = tests[0]
+
+# Choose whether to save results to folder with specific name
+save_output = True
+results_file_name = "test"
 
 def main():
 
@@ -69,6 +74,10 @@ def main():
     # Test 3 channel concatenation based fusion if selected
     elif chosen_test == "3 Channel Concatenation":
         test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
+
+    # Save results to folder if wanted
+    if save_output:
+        save_results(results_file_name)
 
     return 
 

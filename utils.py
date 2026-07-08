@@ -664,4 +664,22 @@ def create_classification_metrics_spreadsheet(model_accuracy, precision, recall,
     # Print message indicating spreadsheet was made
     print("Classification metrics spreadsheet created")
 
+# Function that saves test results to new folder
+def save_results(file_name):
+
+    # Define path to new results folder
+    results_folder_path = Path(f"./Test_Results/{file_name}")
+    
+    # If directory exists, delete it
+    if results_folder_path.is_dir():
+        shutil.rmtree(results_folder_path)
+    
+    # Make new directory
+    results_folder_path.mkdir()
+
+    # Copy history plot, confusion matrices and classification metrics to new folder
+    for file in ["./History_Plots/history_plot.png", "./Confusion_Matrices/confusion_matrix_test.png", 
+                 "./Confusion_Matrices/confusion_matrix_training.png", "./Classification_Metrics/CM_spreadsheet.xlsx"]:
+        shutil.copy(file, results_folder_path)
+
 # --------------------------------------- END OF MODEL EVALUATION CODE -------------------------------------------------

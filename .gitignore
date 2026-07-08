@@ -8,7 +8,9 @@
 **/History_Plots/*
 **/Confusion_Matrices/*
 **/Classification_Metrics/*
+**/Test_Results/*
 
 !History_Plots/.gitkeep
 !Confusion_Matrices/.gitkeep
 !Classification_Metrics/.gitkeep
+!Test_Results/.gitkeep
