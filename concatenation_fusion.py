@@ -31,9 +31,9 @@ from utils import get_actual_predicted_labels
 from utils import plot_confusion_matrix
 from utils import calculate_precision_recall
 from utils import calculate_F1_scores
-from utils import print_classification_metrics
 from utils import get_test_settings
 from utils import early_stoppage
+from utils import create_classification_metrics_spreadsheet
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
@@ -481,8 +481,8 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to print classificaiton metrics
-    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics
+    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 
@@ -570,8 +570,8 @@ def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps,
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to print classificaiton metrics
-    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics
+    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 

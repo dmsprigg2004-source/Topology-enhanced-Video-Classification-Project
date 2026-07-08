@@ -7,6 +7,8 @@
 **/val/*
 **/History_Plots/*
 **/Confusion_Matrices/*
+**/Classification_Metrics/*
 
 !History_Plots/.gitkeep
 !Confusion_Matrices/.gitkeep
+!Classification_Metrics/.gitkeep

@@ -27,6 +27,7 @@ from pathlib import Path
 import shutil
 import copy
 import math
+from openpyxl import Workbook
 
 # ----------------------------------  DATA LOADING AND PREPROCESSING CODE --------------------------------------------
 
@@ -614,32 +615,53 @@ def calculate_F1_scores(precision, recall):
     # Return dicitonary
     return F1_scores
 
-# Function that prints classification metrics
-def print_classification_metrics(model_accuracy, precision, recall, F1_scores):
+# Function that saves classification metrics to spreadsheet
+def create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores):
 
-    # Print line for readability
-    print("------------------------------------------------------------------------")
+    # Initialize workbook and spreadsheet
+    workbook = Workbook()
+    sheet = workbook.active
 
-    # Print model accuracy
-    print("Model accuracy:\n")
-    print(model_accuracy)
+    # Write category titles
+    sheet["A1"] = "Accuracy:"
+    sheet["C1"] = "Precision:"
+    sheet["F1"] = "Recall:"
+    sheet["I1"] = "F1 Scores:"
 
-    # Loop through precision values and print them
-    print("\nPrecision values:\n")
+    # Write model accuracy
+    sheet["A3"] = model_accuracy
+
+    # Set output column
+    column = 3
+
+    # Loop through precision dictionary and write to spreadsheet
     for key, value in precision.items():
-        print(f"{key}: {value}")
-    
-    # Loop through recall values and print them
-    print("\nRecall values:\n")
+        sheet[f"C{column}"] = f"{key}:"
+        sheet[f"D{column}"] = value
+        column += 1
+
+    # Set output column
+    column = 3
+
+    # Loop through recall dictionary and write to spreadsheet
     for key, value in recall.items():
-        print(f"{key}: {value}")
+        sheet[f"F{column}"] = f"{key}:"
+        sheet[f"G{column}"] = value
+        column += 1
 
-    # Loop through F1 scores and print them
-    print("\nF1 scores:\n")
+    # Set output column
+    column = 3
+
+    # Loop through F1 score dictionary and write to spreadsheet
     for key, value in F1_scores.items():
-        print(f"{key}: {value}")
+        sheet[f"I{column}"] = f"{key}:"
+        sheet[f"J{column}"] = value
+        column += 1
 
-    # Print line for readability
-    print("------------------------------------------------------------------------")
+    # Save spreadsheet to folder
+    workbook.save("./Classification_Metrics/CM_spreadsheet.xlsx")
+
+    # Print message indicating spreadsheet was made
+    print("Classification metrics spreadsheet created")
 
 # --------------------------------------- END OF MODEL EVALUATION CODE -------------------------------------------------

@@ -28,12 +28,12 @@ from utils import get_actual_predicted_labels
 from utils import plot_confusion_matrix
 from utils import calculate_precision_recall
 from utils import calculate_F1_scores
-from utils import print_classification_metrics
 from utils import ResizeVideo
 from utils import add_residual_block
 from utils import Conv2Plus1D
 from utils import frames_from_video_file
 from utils import get_test_settings
+from utils import create_classification_metrics_spreadsheet
 
 from concatenation_fusion import generate_point_clouds
 from concatenation_fusion import generate_pds_sts
@@ -124,8 +124,8 @@ def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dir
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to print classificaiton metrics
-    print_classification_metrics(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics
+    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 
