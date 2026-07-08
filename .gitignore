@@ -7,10 +7,10 @@
 **/val/*
 **/History_Plots/*
 **/Confusion_Matrices/*
-**/Classification_Metrics/*
+**/CM_Test_Settings/*
 **/Test_Results/*
 
 !History_Plots/.gitkeep
 !Confusion_Matrices/.gitkeep
-!Classification_Metrics/.gitkeep
+!CM_Test_Settings/.gitkeep
 !Test_Results/.gitkeep

@@ -680,7 +680,7 @@ def create_metrics_test_settings_spreadsheet(model_accuracy, precision, recall, 
     sheet["M11"] = batch_size
 
     # Save spreadsheet to folder
-    workbook.save("./Classification_Metrics/CM_spreadsheet.xlsx")
+    workbook.save("./CM_Test_Settings/CM_Test_Spreadsheet.xlsx")
 
     # Print message indicating spreadsheet was made
     print("Classification metrics and test settings spreadsheet created")
@@ -698,9 +698,9 @@ def save_results(file_name):
     # Make new directory
     results_folder_path.mkdir()
 
-    # Copy history plot, confusion matrices and classification metrics to new folder
+    # Copy history plot, confusion matrices and classification metrics/test settings spreadsheet to new folder
     for file in ["./History_Plots/history_plot.png", "./Confusion_Matrices/confusion_matrix_test.png", 
-                 "./Confusion_Matrices/confusion_matrix_training.png", "./Classification_Metrics/CM_spreadsheet.xlsx"]:
+                 "./Confusion_Matrices/confusion_matrix_training.png", "./CM_Test_Settings/CM_Test_Spreadsheet.xlsx"]:
         shutil.copy(file, results_folder_path)
 
 # --------------------------------------- END OF MODEL EVALUATION CODE -------------------------------------------------
