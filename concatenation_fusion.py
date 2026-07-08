@@ -33,7 +33,7 @@ from utils import calculate_precision_recall
 from utils import calculate_F1_scores
 from utils import get_test_settings
 from utils import early_stoppage
-from utils import create_classification_metrics_spreadsheet
+from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
 
 # Get test settings
@@ -469,8 +469,8 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
     # Evaluate model to get accuracy and loss values
     model_accuracy_and_loss = model.evaluate(test_concatenated_frames, return_dict=True)
 
-    # Obtain rounded model accuracy value
-    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+    # Obtain model accuracy
+    model_accuracy = model_accuracy_and_loss["accuracy"]
 
     # Use FrameGenerator class to obtain class labels from training data
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
@@ -490,8 +490,8 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to create spreadsheet of classification metrics
-    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics and test settings
+    create_metrics_test_settings_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 
@@ -558,8 +558,8 @@ def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps,
     # Evaluate model to get accuracy and loss values
     model_accuracy_and_loss = model.evaluate(test_concatenated_frames, return_dict=True)
 
-    # Obtain rounded model accuracy value
-    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+    # Obtain model accuracy
+    model_accuracy = model_accuracy_and_loss["accuracy"]
 
     # Use FrameGenerator class to obtain class labels from training data
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
@@ -579,8 +579,8 @@ def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps,
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to create spreadsheet of classification metrics
-    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics and test settings
+    create_metrics_test_settings_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 

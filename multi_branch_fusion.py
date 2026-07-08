@@ -33,7 +33,7 @@ from utils import add_residual_block
 from utils import Conv2Plus1D
 from utils import frames_from_video_file
 from utils import get_test_settings
-from utils import create_classification_metrics_spreadsheet
+from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
 
 from concatenation_fusion import generate_point_clouds
@@ -112,8 +112,8 @@ def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dir
     # Evaluate model to get accuracy and loss values
     model_accuracy_and_loss = model.evaluate(test_ds, return_dict=True)
 
-    # Obtain rounded model accuracy value
-    model_accuracy = round(model_accuracy_and_loss["accuracy"], 2)
+    # Obtain model accuracy
+    model_accuracy = model_accuracy_and_loss["accuracy"]
 
     # Use FrameGenerator class to obtain class labels from training data
     fg = FrameGenerator(subset_dirs['train'], n_frames, training=True)
@@ -133,8 +133,8 @@ def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dir
     # Call function to calculate F1 scores
     F1_scores = calculate_F1_scores(precision, recall)
 
-    # Call function to create spreadsheet of classification metrics
-    create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores)
+    # Call function to create spreadsheet of classification metrics and test settings
+    create_metrics_test_settings_spreadsheet(model_accuracy, precision, recall, F1_scores)
 
     return
 

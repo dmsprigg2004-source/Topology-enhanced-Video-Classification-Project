@@ -615,8 +615,8 @@ def calculate_F1_scores(precision, recall):
     # Return dicitonary
     return F1_scores
 
-# Function that saves classification metrics to spreadsheet
-def create_classification_metrics_spreadsheet(model_accuracy, precision, recall, F1_scores):
+# Function that saves classification metrics and test settings to spreadsheet
+def create_metrics_test_settings_spreadsheet(model_accuracy, precision, recall, F1_scores):
 
     # Initialize workbook and spreadsheet
     workbook = Workbook()
@@ -627,6 +627,7 @@ def create_classification_metrics_spreadsheet(model_accuracy, precision, recall,
     sheet["C1"] = "Precision:"
     sheet["F1"] = "Recall:"
     sheet["I1"] = "F1 Scores:"
+    sheet["L1"] = "Test Settings:"
 
     # Write model accuracy
     sheet["A3"] = model_accuracy
@@ -658,11 +659,31 @@ def create_classification_metrics_spreadsheet(model_accuracy, precision, recall,
         sheet[f"J{column}"] = value
         column += 1
 
+    # Write test settings to spreadsheet
+    sheet["L3"] = "Num. Categories:"
+    sheet["M3"] = num_categories
+    sheet["L4"] = "Split (train):"
+    sheet["M4"] = splits["train"]
+    sheet["L5"] = "Split (val):"
+    sheet["M5"] = splits["val"]
+    sheet["L6"] = "Split (test):"
+    sheet["M6"] = splits["test"]
+    sheet["L7"] = "Num. Epoches:"
+    sheet["M7"] = epochs
+    sheet["L8"] = "Height:"
+    sheet["M8"] = height
+    sheet["L9"] = "Width:"
+    sheet["M9"] = width
+    sheet["L10"] = "Num. Frames:"
+    sheet["M10"] = n_frames
+    sheet["L11"] = "Batch Size:"
+    sheet["M11"] = batch_size
+
     # Save spreadsheet to folder
     workbook.save("./Classification_Metrics/CM_spreadsheet.xlsx")
 
     # Print message indicating spreadsheet was made
-    print("Classification metrics spreadsheet created")
+    print("Classification metrics and test settings spreadsheet created")
 
 # Function that saves test results to new folder
 def save_results(file_name):
