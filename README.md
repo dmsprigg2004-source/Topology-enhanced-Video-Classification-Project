@@ -42,3 +42,11 @@ Confusion_Matrices/History_Plots:
 
     - Folders to store outputted model assessment plots
 
+CM_Test_Settings:
+
+    - Folder to store exel files detailing classification metrics and test settings from a test
+
+Test_Results:
+
+    - Folder to store all test result data
+
