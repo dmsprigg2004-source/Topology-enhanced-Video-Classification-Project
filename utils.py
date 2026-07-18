@@ -37,7 +37,7 @@ def get_test_settings():
     # Define desired test settings
     num_categories = 30
     splits = {"train": 70, "val": 10, "test": 20}
-    epochs = 250
+    epochs = 150
     height = 112
     width = 112
     n_frames = 16
@@ -480,7 +480,7 @@ def create_3D_CNN(x_ds, input_shape):
 
 # Define function that returns an early stoppage callback which monitors validation loss metric
 def early_stoppage():
-    return keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.005, patience=10, restore_best_weights=True, start_from_epoch=30)
+    return keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.01, patience=15, restore_best_weights=True, start_from_epoch=30)
 
 # -------------------------------------  END OF MODEL CREATION CODE ---------------------------------------------------
 
