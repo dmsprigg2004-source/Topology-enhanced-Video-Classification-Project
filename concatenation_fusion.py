@@ -22,6 +22,7 @@ import keras
 from gtda.images import ImageToPointCloud
 import gudhi as gd
 from gudhi.representations import PersistenceImage
+import open3d
 
 from utils import create_subset_dirs
 from utils import FrameGenerator
@@ -83,6 +84,34 @@ def main():
 
 # ------------------------------------ TOPOLOGICAL FEATURE EXTRACTION CODE ---------------------------------------------
 
+# Function that downsamples a given point cloud
+def downsample_point_cloud(point_cloud):
+
+    # Define number of points in point cloud
+    num_points = point_cloud.shape[0]
+
+    # If point cloud has zero points, return "None"
+    if num_points == 0:
+        return None
+    
+    # Create object for PointCloud class
+    pcd = open3d.geometry.PointCloud()
+
+    # Make point cloud 3d by adding a third dimension with zeros
+    three_dimensional_pc = np.column_stack((point_cloud, np.zeros(point_cloud.shape[0])))
+
+    # Define point cloud points
+    pcd.points = open3d.utility.Vector3dVector(three_dimensional_pc)
+
+    # Downsample point cloud using a voxel of size 3
+    downsampled_point_cloud = pcd.voxel_down_sample(voxel_size=3)
+
+    # Convert point cloud to an array
+    np_point_cloud = np.asarray(downsampled_point_cloud.points)
+
+    # Return downsampled point cloud
+    return np_point_cloud
+
 # Function that generates point clouds from the data
 def generate_point_clouds(video_frames, chosen_test):
 
@@ -119,23 +148,18 @@ def generate_point_clouds(video_frames, chosen_test):
     # Generate point clouds from binary frames
     point_clouds = itpc.fit_transform(binary_frames_arr, y=None)
 
+    # Create list of downsampled point clouds
+    downsampled_pcs = [downsample_point_cloud(point_cloud) for point_cloud in point_clouds]
+
     # Return point clouds
-    return point_clouds
+    return downsampled_pcs
 
 # Function that generates a simplex tree from a point cloud
 def generate_st(point_cloud):
 
-    # Define number of points in point cloud
-    num_points = point_cloud.shape[0]
-
-    # If point cloud has zero points, return "None"
-    if num_points == 0:
+    # If point cloud has "None" value, return None
+    if point_cloud is None:
         return None
-    
-    # If point cloud has more than 1000 points, resize to 1000 by choosing 1000 points at random
-    if num_points > 1000:
-        indices = np.random.choice(range(0, num_points - 1), 1000)
-        point_cloud = point_cloud[indices]
 
     # Create a simplex tree from point cloud
     simplex_tree = gd.AlphaComplex(points=point_cloud).create_simplex_tree()
@@ -154,7 +178,7 @@ def generate_persistence_image(simplex_tree):
         return None
 
     # Create persistence image
-    persistence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
+    persistence_image = PersistenceImage(bandwidth=0.5, weight=lambda x: x[1]**2,
                                     im_range=[0,18,0,18], resolution=[height,width])
     persistence_image = persistence_image.fit_transform([simplex_tree.persistence_intervals_in_dimension(1)])
 
@@ -196,8 +220,18 @@ def tf_extraction_ds(x_ds, name):
         # Add persistence image to output list
         persistence_images_list.append(persistence_image)
 
+    # Obtain all pixel values from persistence images
+    concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
+
+    # Calculate mean and standard deviation of pixel values
+    mean_pi_val = np.mean(concatenated_pi_list)
+    std_pi_val = np.std(concatenated_pi_list)
+
+    # Standardize persistence images and make into a list
+    standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in persistence_images_list]
+
     # Return persistence images list
-    return persistence_images_list
+    return standardized_pi_list
 
 # Function that takes a list of frames and returns a list of persistence images
 def tf_extraction_list(frame_list, name):
