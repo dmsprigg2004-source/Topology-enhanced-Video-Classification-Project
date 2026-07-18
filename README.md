@@ -18,7 +18,7 @@ baseline_model.py:
 concatenation_fusion.py:
 
     - Extracts topological features from data
-    - Contains two implimentations of concatenation-based feature fusion. One done by separating colour channels and one that keeps them intact
+    - Contains two implementations of concatenation-based feature fusion. One done by separating colour channels and one that keeps them intact
 
 multi_branch_fusion.py:
 
@@ -30,7 +30,7 @@ utils.py:
     Includes several helper functions which together can do the following:
 
         - Load and preprocess video data
-        - Impliment baseline 3D CNN video classification model
+        - Implement baseline 3D CNN video classification model
         - Assess model performance with standard classification metrics
 
 CBAM_keras:
@@ -44,7 +44,7 @@ Confusion_Matrices/History_Plots:
 
 CM_Test_Settings:
 
-    - Folder to store exel files detailing classification metrics and test settings from a test
+    - Folder to store Excel files detailing classification metrics and test settings from a test
 
 Test_Results:
 
