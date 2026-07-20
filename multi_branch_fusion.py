@@ -37,8 +37,8 @@ from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
 
 from concatenation_fusion import generate_point_clouds
-from concatenation_fusion import generate_pds_sts
-from concatenation_fusion import generate_persistence_images
+from concatenation_fusion import generate_st
+from concatenation_fusion import generate_persistence_image
 
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
@@ -64,10 +64,18 @@ def main():
                          tf.TensorSpec(shape = (), dtype = tf.int16))
     
     # Generate training, validation and testing datasets
+    print("Creating training dataset...")
     train_ds = tf.data.Dataset.from_generator(Frame_PI_Generator(subset_dirs['train'], n_frames, training=True), 
                                               output_signature = output_signature)
+    print("Complete")
+
+    print("Creating validation dataset...")
     val_ds = tf.data.Dataset.from_generator(Frame_PI_Generator(subset_dirs['val'], n_frames), output_signature = output_signature)
+    print("Complete")
+    
+    print("Creating testing dataset...")
     test_ds = tf.data.Dataset.from_generator(Frame_PI_Generator(subset_dirs['test'], n_frames), output_signature = output_signature)
+    print("Complete")
 
     # Call function to test multi-branch fusion model
     test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
@@ -174,7 +182,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         if chosen_test == "Multi-Branch with CBAM":
             x = cbam_block(x)
 
-        # Resize video to one quarter of its current hight and width
+        # Resize video to one quarter of its current height and width
         x = ResizeVideo(height // 4, width // 4)(x)
 
         # Add residual block with a specified number of filters and specific kernel size
@@ -210,9 +218,6 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         # Add layer to reshape data into one dimension
         x = layers.Flatten()(x)
 
-        # Add a dense layer the size of the number of categories
-        x = layers.Dense(num_categories)(x)
-
         # Assign "x" to specific output variable
         if count == 0:
             output_1 = x
@@ -220,8 +225,11 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         else:
             output_2 = x
 
-    # Average the outputs
-    output = layers.Average()([output_1, output_2])
+    # Concatenate the branches
+    output = layers.concatenate([output_1, output_2])
+
+    # Add a dense layer the size of the number of categories
+    output = layers.Dense(num_categories)(output)
 
     # Define model using starting and ending points
     model = keras.Model(inputs=[x_ds_input, pi_ds_input], outputs = output)
@@ -282,14 +290,25 @@ class Frame_PI_Generator:
 
             # Obtain persistence images based on video frames and store them to a list
             point_clouds = generate_point_clouds(video_frames, "Multi-Branch Fusion")
-            simplex_trees, persistence_diagrams = generate_pds_sts(point_clouds)
-            persistence_images = generate_persistence_images(simplex_trees)
+
+            # Initialize persistence image list
+            pi_list = []
+
+            # Loop through point clouds
+            for point_cloud in point_clouds:
+
+                # Generate simplex tree
+                simplex_tree = generate_st(point_cloud)
+
+                # Generate persistence image and add to list
+                persistence_image = generate_persistence_image(simplex_tree)
+                pi_list.append(persistence_image)
 
             # Initialize list for persistence image tensors
             pi_tensors = []
 
             # Loop through persistence images within list
-            for pi in persistence_images:
+            for pi in pi_list:
                 
                 # If current persistence image is "None," set current persistence image tensor to a tensor of desired shape filled with zeros
                 if pi is None:
