@@ -179,7 +179,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 16, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM":
+        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
             x = cbam_block(x)
 
         # Resize video to one quarter of its current height and width
@@ -189,7 +189,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 32, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM":
+        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
             x = cbam_block(x)
 
         # Resize video to one eighth of its current height and width
@@ -199,7 +199,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 64, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM":
+        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
             x = cbam_block(x)
 
         # Resize video to one sixteenth of its current height and width
@@ -209,7 +209,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 128, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM":
+        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
             x = cbam_block(x)
 
         # Add layer that downsamples model data
