@@ -186,7 +186,7 @@ def generate_persistence_image(simplex_tree):
     return persistence_image
 
 # Function that takes a dataset and returns a list of persistence images
-def tf_extraction_ds(x_ds, name):
+def tf_extraction_ds(x_ds, name, training_val):
     
     # Initialize dictionary and count variable
     frames_dict = {}
@@ -220,18 +220,21 @@ def tf_extraction_ds(x_ds, name):
         # Add persistence image to output list
         persistence_images_list.append(persistence_image)
 
-    # Obtain all pixel values from persistence images
-    concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
+    # If training is true get values for standardization
+    if training_val == True:
 
-    # Calculate mean and standard deviation of pixel values
-    mean_pi_val = np.mean(concatenated_pi_list)
-    std_pi_val = np.std(concatenated_pi_list)
+        # Obtain all pixel values from persistence images
+        concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
 
-    # Standardize persistence images and make into a list
-    standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in persistence_images_list]
+        # Calculate mean and standard deviation of pixel values
+        mean_pi_val = np.mean(concatenated_pi_list)
+        std_pi_val = np.std(concatenated_pi_list)
+
+        # Return persistence images list along with mean and standard deviation of pixel values
+        return persistence_images_list, mean_pi_val, std_pi_val
 
     # Return persistence images list
-    return standardized_pi_list
+    return persistence_images_list
 
 # Function that takes a list of frames and returns a list of persistence images
 def tf_extraction_list(frame_list, name):
@@ -439,19 +442,24 @@ class Three_channel_concatenated_frame_generator:
 def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Get topological features from the datasets
-    train_persistence_images_list = tf_extraction_ds(train_ds, "Training")
-    val_persistence_images_list = tf_extraction_ds(val_ds, "Validation")
-    test_persistence_images_list = tf_extraction_ds(test_ds, "Test")
+    train_persistence_images_list, mean_pi_val, std_pi_val = tf_extraction_ds(train_ds, "Training", training_val = True)
+    val_persistence_images_list = tf_extraction_ds(val_ds, "Validation", training_val = False)
+    test_persistence_images_list = tf_extraction_ds(test_ds, "Test", training_val = False)
+
+    # Standardize persistence images and make into a list
+    train_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in train_persistence_images_list]
+    vali_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in val_persistence_images_list]
+    test_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in test_persistence_images_list]
     
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation and testing datasets
-    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_ds, train_persistence_images_list), 
+    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_ds, train_standardized_pi_list), 
                                                                 output_signature = output_signature)
-    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_ds, val_persistence_images_list), 
+    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_ds, vali_standardized_pi_list), 
                                                                 output_signature = output_signature)
-    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_ds, test_persistence_images_list), 
+    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_ds, test_standardized_pi_list), 
                                                                 output_signature = output_signature)
 
     # Make versions of datasets that repeat for training
