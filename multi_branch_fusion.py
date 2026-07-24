@@ -77,8 +77,32 @@ def main():
     test_ds = tf.data.Dataset.from_generator(Frame_PI_Generator(subset_dirs['test'], n_frames), output_signature = output_signature)
     print("Complete")
 
+    print("Standardizing persistence images")
+    # Initialize persistence images list from training dataset
+    train_persistence_images_list = []
+
+    # Loop through training dataset
+    for (video_frames, pi_array), label in train_ds:
+
+        # Add all persistence images to list
+        for pi in pi_array:
+            train_persistence_images_list.append(pi)
+
+    # Obtain all pixel values from persistence images
+    concatenated_pi_list = np.concatenate([pi.ravel() for pi in train_persistence_images_list if pi is not None])
+
+    # Calculate mean and standard deviation of pixel values
+    mean_pi_val = np.mean(concatenated_pi_list)
+    std_pi_val = np.std(concatenated_pi_list)
+
+    # Create datasets with standardized persistence images
+    standardized_train_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(train_ds, mean_pi_val, std_pi_val))
+    standardized_val_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(val_ds, mean_pi_val, std_pi_val))
+    standardized_test_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(test_ds, mean_pi_val, std_pi_val))
+    print("Complete")
+
     # Call function to test multi-branch fusion model
-    test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds)
+    test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, standardized_train_ds, standardized_val_ds, standardized_test_ds)
 
     # Save results to folder if wanted
     if save_output:
@@ -266,7 +290,7 @@ class Frame_PI_Generator:
         # Return lists
         return video_paths, classes
 
-    # __call__ function that yields video frames with their respective label
+    # __call__ function that yields video frames and persistence images and their respective label
     def __call__(self):
 
         # Call function to get video paths and class names
@@ -330,6 +354,27 @@ class Frame_PI_Generator:
             # Yield video frames and persistence images with their respective label
             yield (video_frames, pi_array), label
 
+# Define Standardized_Frame_PI_Generator class
+class Standardized_Frame_PI_Generator:
+
+    # __init__ function to initialize instance attributes
+    def __init__(self, x_ds, mean_pi_val, std_pi_val):
+        self.x_ds = x_ds
+        self.mean_pi_val = mean_pi_val
+        self.std_pi_val = std_pi_val
+
+    # __call__ function that yields video frames and standardized persistence images with their respective label
+    def __call__(self):
+
+        # Loop through input dataset
+        for (video_frames, pi_array), label in self.x_ds:
+
+            # Standardize persistence images
+            pi_array = (pi_array - self.mean_pi_val) / self.std_pi_val
+
+            # Yield video frames and standardized persistence images with their respective label
+            yield (video_frames, pi_array), label
+        
 # -------------------------------------------  END OF MULTI BRANCH FUSION CODE ----------------------------------------------
 
 if __name__ == "__main__":
