@@ -35,12 +35,12 @@ from openpyxl import Workbook
 def get_test_settings():
 
     # Define desired test settings
-    num_categories = 30
-    splits = {"train": 70, "val": 10, "test": 20}
+    num_categories = 25
+    splits = {"train": 35, "val": 5, "test": 10}
     epochs = 150
     height = 112
     width = 112
-    n_frames = 16
+    n_frames = 8
     batch_size = 8
 
     # Calculate steps per epoch and validation steps
