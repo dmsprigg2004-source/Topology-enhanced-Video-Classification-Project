@@ -137,7 +137,7 @@ def generate_point_clouds(video_frames, chosen_test):
             frame = (grey_image * 255).astype(np.uint8)
 
         # Convert frame to binary image
-        ret, binary_image = cv2.threshold(frame, 127, 255, cv2.THRESH_BINARY)
+        binary_image = cv2.adaptiveThreshold(frame, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
         # Append binary image to list
         binary_frames.append(binary_image)
@@ -178,7 +178,7 @@ def generate_persistence_image(simplex_tree):
         return None
 
     # Create persistence image
-    persistence_image = PersistenceImage(bandwidth=0.5, weight=lambda x: x[1]**2,
+    persistence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
                                     im_range=[0,18,0,18], resolution=[height,width])
     persistence_image = persistence_image.fit_transform([simplex_tree.persistence_intervals_in_dimension(1)])
 
@@ -226,12 +226,12 @@ def tf_extraction_ds(x_ds, name, training_val):
         # Obtain all pixel values from persistence images
         concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
 
-        # Calculate mean and standard deviation of pixel values
-        mean_pi_val = np.mean(concatenated_pi_list)
-        std_pi_val = np.std(concatenated_pi_list)
+        # Calculate IQR and median of pixel values
+        IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+        median_pi_val = np.median(concatenated_pi_list)
 
-        # Return persistence images list along with mean and standard deviation of pixel values
-        return persistence_images_list, mean_pi_val, std_pi_val
+        # Return persistence images list along with median and IQR of pixel values
+        return persistence_images_list, median_pi_val, IQR
 
     # Return persistence images list
     return persistence_images_list
@@ -442,14 +442,14 @@ class Three_channel_concatenated_frame_generator:
 def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Get topological features from the datasets
-    train_persistence_images_list, mean_pi_val, std_pi_val = tf_extraction_ds(train_ds, "Training", training_val = True)
+    train_persistence_images_list, median, IQR = tf_extraction_ds(train_ds, "Training", training_val = True)
     val_persistence_images_list = tf_extraction_ds(val_ds, "Validation", training_val = False)
     test_persistence_images_list = tf_extraction_ds(test_ds, "Test", training_val = False)
 
     # Standardize persistence images and make into a list
-    train_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in train_persistence_images_list]
-    vali_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in val_persistence_images_list]
-    test_standardized_pi_list = [(pi - mean_pi_val) / std_pi_val if pi is not None else None for pi in test_persistence_images_list]
+    train_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in train_persistence_images_list]
+    vali_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in val_persistence_images_list]
+    test_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in test_persistence_images_list]
     
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
