@@ -237,7 +237,7 @@ def tf_extraction_ds(x_ds, name, training_val):
     return persistence_images_list
 
 # Function that takes a list of frames and returns a list of persistence images
-def tf_extraction_list(frame_list, name):
+def tf_extraction_list(frame_list, name, train_val):
 
     # Initialize lists
     simplex_trees_list = []
@@ -261,6 +261,19 @@ def tf_extraction_list(frame_list, name):
         persistence_image = generate_persistence_image(tree)
         persistence_images_list.append(persistence_image)
     print("Done")
+
+    # If training is true get values for normalization
+    if train_val == True:
+
+        # Obtain all pixel values from persistence images
+        concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
+
+        # Calculate IQR and median of pixel values
+        IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+        median_pi_val = np.median(concatenated_pi_list)
+
+        # Return persistence images list along with median and IQR of pixel values
+        return persistence_images_list, median_pi_val, IQR
 
     # Return list of persistence images
     return persistence_images_list
@@ -348,27 +361,6 @@ def split_frames(x_ds):
             red.append(r)
             blue.append(b)
             green.append(g)
-    
-    # Define all black channel with the same shape as colour channels
-    black = np.zeros(red[0].shape, np.uint8)
-
-    # Loop through colour channel lists
-    for i in range(len(red)):
-        
-        # Select specific channel
-        r = red[i]
-        b = blue[i]
-        g = green[i]
-
-        # Merge colour channels with fully black channel
-        new_r = cv2.merge([r, black, black])
-        new_g = cv2.merge([black, g, black])
-        new_b = cv2.merge([black, black, b])
-
-        # Update channels to new values
-        red[i] = new_r
-        blue[i] = new_b
-        green[i] = new_g
 
     # Return lists
     return red, green, blue
@@ -526,30 +518,45 @@ def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps,
     red_test_list, green_test_list, blue_test_list = split_frames(test_ds)
 
     # Get topological features of training data
-    red_train_pi_list = tf_extraction_list(red_train_list, "Training, red")
-    green_train_pi_list = tf_extraction_list(green_train_list, "Training, green")
-    blue_train_pi_list = tf_extraction_list(blue_train_list, "Training, blue")
+    red_train_pi_list, red_median_pi_val, red_IQR = tf_extraction_list(red_train_list, "Training, red", train_val = True)
+    green_train_pi_list, green_median_pi_val, green_IQR = tf_extraction_list(green_train_list, "Training, green", train_val = True)
+    blue_train_pi_list, blue_median_pi_val, blue_IQR = tf_extraction_list(blue_train_list, "Training, blue", train_val = True)
 
     # Get topological features of validaiton data
-    red_val_pi_list = tf_extraction_list(red_val_list, "Validation, red")
-    green_val_pi_list = tf_extraction_list(green_val_list, "Validation, green")
-    blue_val_pi_list = tf_extraction_list(blue_val_list, "Validation, blue")
+    red_val_pi_list = tf_extraction_list(red_val_list, "Validation, red", train_val = False)
+    green_val_pi_list = tf_extraction_list(green_val_list, "Validation, green", train_val = False)
+    blue_val_pi_list = tf_extraction_list(blue_val_list, "Validation, blue", train_val = False)
 
     # Get topological features of testing data
-    red_test_pi_list = tf_extraction_list(red_test_list, "Test, red")
-    green_test_pi_list = tf_extraction_list(green_test_list, "Test, green")
-    blue_test_pi_list = tf_extraction_list(blue_test_list, " Test, blue")
+    red_test_pi_list = tf_extraction_list(red_test_list, "Test, red", train_val = False)
+    green_test_pi_list = tf_extraction_list(green_test_list, "Test, green", train_val = False)
+    blue_test_pi_list = tf_extraction_list(blue_test_list, " Test, blue", train_val = False)
+
+    print("Standardizing persistence images")
+    # Standardize persistence images and make into a list
+    red_train_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_train_pi_list]
+    red_vali_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_val_pi_list]
+    red_test_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_test_pi_list]
+
+    green_train_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_train_pi_list]
+    green_vali_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_val_pi_list]
+    green_test_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_test_pi_list]
+
+    blue_train_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_train_pi_list]
+    blue_vali_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_val_pi_list]
+    blue_test_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_test_pi_list]
+    print("Done")
 
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 6), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation, and testing datasets
-    train_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(train_ds, red_train_pi_list, 
-                                                            green_train_pi_list, blue_train_pi_list), output_signature = output_signature)
-    val_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(val_ds, red_val_pi_list, 
-                                                            green_val_pi_list, blue_val_pi_list), output_signature = output_signature)
-    test_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(test_ds, red_test_pi_list, 
-                                                            green_test_pi_list, blue_test_pi_list), output_signature = output_signature)
+    train_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(train_ds, red_train_standardized_pi_list, 
+                                                            green_train_standardized_pi_list, blue_train_standardized_pi_list), output_signature = output_signature)
+    val_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(val_ds, red_vali_standardized_pi_list, 
+                                                            green_vali_standardized_pi_list, blue_vali_standardized_pi_list), output_signature = output_signature)
+    test_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(test_ds, red_test_standardized_pi_list, 
+                                                            green_test_standardized_pi_list, blue_test_standardized_pi_list), output_signature = output_signature)
     
     # Make versions of datasets that repeat for training
     repeat_train_concatenated_frames = train_concatenated_frames.repeat().batch(batch_size)
