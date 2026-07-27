@@ -89,16 +89,23 @@ def main():
             train_persistence_images_list.append(pi)
 
     # Obtain all pixel values from persistence images
-    concatenated_pi_list = np.concatenate([pi.ravel() for pi in train_persistence_images_list if pi is not None])
+    concatenated_pi_list = np.concatenate([pi.numpy().ravel() for pi in train_persistence_images_list if pi is not None])
 
-    # Calculate mean and standard deviation of pixel values
-    mean_pi_val = np.mean(concatenated_pi_list)
-    std_pi_val = np.std(concatenated_pi_list)
+    # Calculate IQR and median of pixel values
+    IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+    median_pi_val = np.median(concatenated_pi_list)
+
+    # Define output signature
+    output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
+                         tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Create datasets with standardized persistence images
-    standardized_train_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(train_ds, mean_pi_val, std_pi_val))
-    standardized_val_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(val_ds, mean_pi_val, std_pi_val))
-    standardized_test_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(test_ds, mean_pi_val, std_pi_val))
+    standardized_train_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(train_ds, median_pi_val, IQR),
+                                                           output_signature = output_signature)
+    standardized_val_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(val_ds, median_pi_val, IQR),
+                                                         output_signature = output_signature)
+    standardized_test_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(test_ds, median_pi_val, IQR),
+                                                          output_signature = output_signature)
     print("Complete")
 
     # Call function to test multi-branch fusion model
@@ -203,7 +210,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 16, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
+        if chosen_test == "Multi-Branch with CBAM" and count == 1:
             x = cbam_block(x)
 
         # Resize video to one quarter of its current height and width
@@ -213,7 +220,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 32, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
+        if chosen_test == "Multi-Branch with CBAM" and count == 1:
             x = cbam_block(x)
 
         # Resize video to one eighth of its current height and width
@@ -223,7 +230,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 64, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
+        if chosen_test == "Multi-Branch with CBAM" and count == 1:
             x = cbam_block(x)
 
         # Resize video to one sixteenth of its current height and width
@@ -233,7 +240,7 @@ def create_multi_branch_3D_CNN(x_ds, input_shape_x_ds, input_shape_pi_ds):
         x = add_residual_block(x, 128, (3, 3, 3))
 
         # If specific test is chosen, apply attention mechanism
-        if chosen_test == "Multi-Branch with CBAM" and shape == pi_ds_input:
+        if chosen_test == "Multi-Branch with CBAM" and count == 1:
             x = cbam_block(x)
 
         # Add layer that downsamples model data
@@ -358,10 +365,10 @@ class Frame_PI_Generator:
 class Standardized_Frame_PI_Generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, mean_pi_val, std_pi_val):
+    def __init__(self, x_ds, median_pi_val, IQR):
         self.x_ds = x_ds
-        self.mean_pi_val = mean_pi_val
-        self.std_pi_val = std_pi_val
+        self.median_pi_val = median_pi_val
+        self.IQR = IQR
 
     # __call__ function that yields video frames and standardized persistence images with their respective label
     def __call__(self):
@@ -370,7 +377,7 @@ class Standardized_Frame_PI_Generator:
         for (video_frames, pi_array), label in self.x_ds:
 
             # Standardize persistence images
-            pi_array = (pi_array - self.mean_pi_val) / self.std_pi_val
+            pi_array = (pi_array - self.median_pi_val) / self.IQR
 
             # Yield video frames and standardized persistence images with their respective label
             yield (video_frames, pi_array), label
