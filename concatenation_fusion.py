@@ -136,6 +136,14 @@ def generate_point_clouds(video_frames, chosen_test):
             # Rescale grey image
             frame = (grey_image * 255).astype(np.uint8)
 
+        if chosen_test == "Multi-Branch Fusion":
+
+            # Convert frame to greyscale form
+            grey_image = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+            # Rescale grey image
+            frame = (grey_image * 255).astype(np.uint8)
+
         # Convert frame to binary image
         binary_image = cv2.adaptiveThreshold(frame, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
