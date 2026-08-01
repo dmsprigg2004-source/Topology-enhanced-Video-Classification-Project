@@ -37,6 +37,8 @@ from utils import early_stoppage
 from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
 
+import math
+
 # Get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
 
@@ -103,8 +105,8 @@ def downsample_point_cloud(point_cloud):
     # Define point cloud points
     pcd.points = open3d.utility.Vector3dVector(three_dimensional_pc)
 
-    # Downsample point cloud using a voxel of size 3
-    downsampled_point_cloud = pcd.voxel_down_sample(voxel_size=3)
+    # Downsample point cloud using a voxel of size 1.5
+    downsampled_point_cloud = pcd.voxel_down_sample(voxel_size=1.5)
 
     # Convert point cloud to an array
     np_point_cloud = np.asarray(downsampled_point_cloud.points)
@@ -184,11 +186,34 @@ def generate_persistence_image(simplex_tree):
     # If tree has "None" value, return None
     if simplex_tree is None:
         return None
+    
+    # Code to be revised later
+    intervals1 = simplex_tree.persistence_intervals_in_dimension(1)
+    intervals0 = simplex_tree.persistence_intervals_in_dimension(0)
+
+    filtered_intervals = []
+
+    for interval in intervals1:
+            filtered_intervals.append(interval)
+
+    for interval in intervals0:
+        if not math.isinf(interval[1]):
+            filtered_intervals.append(interval)
+
+    filtered_intervals = np.array(filtered_intervals)
+
+    filtered_2 = []
+
+    for interval in filtered_intervals:
+        if interval[1] - interval[0] > .75:
+            filtered_2.append(interval)
+
+    filtered_2 = np.array(filtered_2)
 
     # Create persistence image
-    persistence_image = PersistenceImage(bandwidth=1, weight=lambda x: x[1]**2,
-                                    im_range=[0,18,0,18], resolution=[height,width])
-    persistence_image = persistence_image.fit_transform([simplex_tree.persistence_intervals_in_dimension(1)])
+    persistence_image = PersistenceImage(bandwidth=0.8, weight=lambda x: x[1]**2,
+                                    im_range=[0,8,0,8], resolution=[height,width])
+    persistence_image = persistence_image.fit_transform([filtered_2])
 
     # Return persistence image
     return persistence_image
