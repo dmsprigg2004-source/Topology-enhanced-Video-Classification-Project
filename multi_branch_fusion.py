@@ -35,6 +35,7 @@ from utils import frames_from_video_file
 from utils import get_test_settings
 from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
+from utils import early_stoppage
 
 from concatenation_fusion import generate_point_clouds
 from concatenation_fusion import generate_st
@@ -108,8 +109,11 @@ def main():
                                                           output_signature = output_signature)
     print("Complete")
 
+    # Obtain early stoppage callback
+    callback = early_stoppage()
+
     # Call function to test multi-branch fusion model
-    test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, standardized_train_ds, standardized_val_ds, standardized_test_ds)
+    test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, standardized_train_ds, standardized_val_ds, standardized_test_ds, callback)
 
     # Save results to folder if wanted
     if save_output:
@@ -118,7 +122,7 @@ def main():
     return
 
 # Function to test multi-branch fusion model
-def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds):
+def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
     # Make version of datasets that repeat for training
     repeat_train_ds = train_ds.repeat().batch(batch_size)
@@ -143,7 +147,7 @@ def test_multi_branch_fusion_model(steps_per_epoch, validation_steps, subset_dir
     
     # Train the model and obtain model history using model.fit()
     history = model.fit(x = repeat_train_ds, epochs = epochs, validation_data = repeat_val_ds, steps_per_epoch = steps_per_epoch, 
-                        validation_steps = validation_steps)
+                        validation_steps = validation_steps, callbacks=[callback])
     
     # Call function to plot history of model training performance
     plot_history(history)
