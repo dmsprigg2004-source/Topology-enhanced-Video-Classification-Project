@@ -43,7 +43,7 @@ def main():
     UCF101_dir = pathlib.Path('./UCF101')
     
     # Create subset directories
-    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
+    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir)
 
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
@@ -53,6 +53,8 @@ def main():
                                               output_signature = output_signature)
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+
+    print("Datasets created")
 
     # Obtain early stoppage callback
     callback = early_stoppage()
