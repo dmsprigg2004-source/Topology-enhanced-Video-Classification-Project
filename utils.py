@@ -25,7 +25,6 @@ from keras import layers
 import os
 from pathlib import Path
 import shutil
-import copy
 import math
 from openpyxl import Workbook
 
@@ -53,28 +52,70 @@ def get_test_settings():
 # Call above function to get test settings
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
 
-# Function that gets a list of files to be used in either training, validation or testing as well as a dictionary 
-# specifying which files are unused
-def split_class_lists(category_dict, split_count):
+# Function that creates video splits for training, validation and testing
+def create_video_splits():
 
-    # Initialize list and remainder dictionary
-    split_files = []
-    remainder = {}
+    # Initialize dictionaries
+    train_pool = {}
+    test_pool = {}
 
-    # Loop through each category
-    for category in category_dict:
+    # Open official dataset split .txt file for training
+    with open('ucfTrainTestlist/trainlist01.txt', 'r') as trainlist:
 
-        # Add needed files to list
-        split_files.extend(category_dict[category][:split_count])
+        # Loop over lines in file
+        for line in trainlist:
 
-        # Add item to remainder dictionary specifying which files have not been chosen in that category
-        remainder[category] = category_dict[category][split_count:]
+            # Access category and video elements
+            split_line = line.split()
+            split_line = split_line[0].split('/')
 
-    # Return list and remainder dictionary
-    return split_files, remainder
+            category = split_line[0]
+            video = split_line[1]
+
+            # If category already in dictionary, add video to list, otherwise make new key with video as first entry
+            if category in train_pool:
+                train_pool[category].append(video)
+            else:
+                train_pool[category] = [video]
+
+    # Open official dataset split .txt file for testing
+    with open('ucfTrainTestlist/testlist01.txt', 'r') as testlist:
+
+        # Loop over lines in file
+        for line in testlist:
+
+            # Access category and video elements
+            split_line = line.split()
+            split_line = split_line[0].split('/')
+
+            category = split_line[0]
+            video = split_line[1]
+
+            # If category already in dictionary, add video to list, otherwise make new key with video as first entry
+            if category in test_pool:
+                test_pool[category].append(video)
+            else:
+                test_pool[category] = [video]
+
+    # Initialize split dictionaries
+    train_split = {}
+    val_split = {}
+    test_split = {}
+
+    # Add videos names to training and validation splits
+    for category, videos in train_pool.items():
+        train_split[category] = videos[:splits["train"]]
+        val_split[category] = videos[splits["train"]:splits["train"] + splits["val"]]
+
+    # Add video names to testing split
+    for category, videos in test_pool.items():
+        test_split[category] = videos[:splits["test"]]
+    
+    # Return splits
+    return train_split, val_split, test_split
 
 # Function to create a new subset directory
-def create_subset_dir(category_dict, categories_list, split_files, split_name):
+def create_subset_dir(category_list, split, split_name):
 
     # Define path for new directory
     new_dir_path = Path(f'./{split_name}')
@@ -87,31 +128,30 @@ def create_subset_dir(category_dict, categories_list, split_files, split_name):
     new_dir_path.mkdir()
     
     # Loop through categories
-    for category in categories_list:
+    for category in category_list:
 
         # Make a new directory inside previously made directory
         new_category_dir_path = Path(f'./{split_name}/{category}')
         new_category_dir_path.mkdir()
 
-        # Loop through files in each category
-        for file in category_dict[category]:
+        # Get list of video names for split
+        videos = split[category]
 
-            # Loop through split_files
-            for split_file in split_files:
+        # Loop through videos
+        for video in videos:
 
-                # If the current file is to be used in this split, copy it to the new directory
-                if file == split_file:
-                    needed_file = Path(f'./UCF101/{category}/{file}')
-                    shutil.copy(needed_file, new_category_dir_path)
+            # Copy needed file to new directory
+            needed_file = Path(f'./UCF101/{category}/{video}')
+            shutil.copy(needed_file, new_category_dir_path)
 
     # Return path to new directory
     return new_dir_path
 
 # Function that creates subset directories for training, validation and testing
-def create_subset_dirs(num_categories, UCF101_dir, splits):
+def create_subset_dirs(num_categories, UCF101_dir):
 
-    # Initialize dicitonary and category count
-    category_dict = {}
+    # Initialize list and category count
+    category_list = []
     category_count = 0
 
     # Loop through categories in UCF101
@@ -120,12 +160,9 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
         # Define path to category
         category_path = os.path.join(UCF101_dir, category)
 
-        # If path leads to a directory, add category to dictionary and copy all videos into a list under that category
+        # If path leads to a directory, add category to list
         if os.path.isdir(category_path):
-            category_dict[category] = []
-
-            for video in os.listdir(category_path):
-                category_dict[category].append(video)
+            category_list.append(category)
 
             # Add 1 to count
             category_count += 1
@@ -133,34 +170,25 @@ def create_subset_dirs(num_categories, UCF101_dir, splits):
         # Once reached specified category count, break
         if category_count == num_categories:
            break
-    
-    # Get list of category names within category_dict
-    categories_list = list(category_dict.keys())[:num_categories]
 
-    # Create random order for videos within category_dict
-    for category in categories_list:
-        new_files_for_class = category_dict[category]
-        random.shuffle(new_files_for_class)
-        category_dict[category] = new_files_for_class
-
-    # Initialize dictionary and make a copy of category_dict
+    # Initialize dictionary
     subset_dirs = {}
-    category_dict_copy = copy.deepcopy(category_dict)
 
-    # Loop through keys and values within splits dicitonary
-    for split_name, split_count in splits.items():
+    # Call function to get training, validation, and testing splits
+    train_split, val_split, test_split = create_video_splits()
 
-        # Get files to be used in this split
-        split_files, category_dict_copy = split_class_lists(category_dict_copy, split_count)
+    # Create subset directories for training, validation, and testing
+    train_dir = create_subset_dir(category_list, train_split, "train")
+    val_dir = create_subset_dir(category_list, val_split, "val")
+    test_dir = create_subset_dir(category_list, test_split, "test")
 
-        # Create directory of this split
-        split_dir = create_subset_dir(category_dict, categories_list, split_files, split_name)
+    # Add directories to dictionary
+    subset_dirs['train'] = train_dir
+    subset_dirs['val'] = val_dir
+    subset_dirs['test'] = test_dir
 
-        # Print message indicating directory was made
-        print(f"{split_name} directory created")
-
-        # Add directory to output directory
-        subset_dirs[split_name] = split_dir
+    # Print message indicating directories were created
+    print("Subset directories created")
 
     # Return subset directories
     return subset_dirs
@@ -184,8 +212,8 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width)):
     # Initalize new VideoCapture object
     src = cv2.VideoCapture(str(video_path))  
 
-    # Define length needed for a frame step of 15
-    need_length = 1 + (n_frames - 1) * 15
+    # Define length needed for a frame step of 5
+    need_length = 1 + (n_frames - 1) * 5
 
     # Get number of frames in video
     video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -196,16 +224,15 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width)):
         # Calculate valid frame step
         frame_step = max(1, math.floor(video_length / n_frames))
 
-        # Define start as first frame
-        start = 0
+        # Print message indicating frame step less than 5 was used
+        print("Frame step set less than 5")
 
     else:
-        # Set frame step to 15
-        frame_step = 15
+        # Set frame step to 5
+        frame_step = 5
 
-        # Define start to a random position within a valid range
-        max_start = video_length - need_length
-        start = random.randint(0, max_start)
+    # Define start as first frame
+    start = 0
 
     # Set starting position using start variable
     src.set(cv2.CAP_PROP_POS_FRAMES, start)
