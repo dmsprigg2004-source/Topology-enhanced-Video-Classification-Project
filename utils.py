@@ -314,6 +314,7 @@ class FrameGenerator:
 
         # If training is True, mix up pairs within pairs list
         if self.training:
+            random.seed(0)
             random.shuffle(pairs)
 
         # Loop through each tuple in pairs list
