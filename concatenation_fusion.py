@@ -23,6 +23,7 @@ from gtda.images import ImageToPointCloud
 import gudhi as gd
 from gudhi.representations import PersistenceImage
 import open3d
+import random
 
 from utils import create_subset_dirs
 from utils import FrameGenerator
@@ -36,6 +37,7 @@ from utils import get_test_settings
 from utils import early_stoppage
 from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
+from utils import frames_from_video_file
 
 import math
 
@@ -56,16 +58,17 @@ def main():
     UCF101_dir = pathlib.Path('./UCF101')
     
     # Create subset directories
-    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
+    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir)
 
     # Define output signature
-    output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+    output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)), 
+                        tf.TensorSpec(shape = (), dtype = tf.int16))
     
     # Generate training, validation and testing datasets
-    train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
+    train_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['train'], n_frames, training=True), 
                                               output_signature = output_signature)
-    val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
-    test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+    val_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
+    test_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
     # Obtain early stoppage callback
     callback = early_stoppage()
@@ -127,18 +130,7 @@ def generate_point_clouds(video_frames, chosen_test):
     for frame in video_frames:
 
         # If concatenation test is selected, preprocess data
-        if chosen_test == "Concatenation":
-        
-            # Convert to NumPy ndarray
-            np_frame = frame.numpy()
-
-            # Convert frame to greyscale form
-            grey_image = cv2.cvtColor(np_frame, cv2.COLOR_RGB2GRAY)
-
-            # Rescale grey image
-            frame = (grey_image * 255).astype(np.uint8)
-
-        if chosen_test == "Multi-Branch Fusion":
+        if chosen_test == "Concatenation" or chosen_test == "Multi-Branch Fusion":
 
             # Convert frame to greyscale form
             grey_image = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
@@ -315,51 +307,130 @@ def tf_extraction_list(frame_list, name, train_val):
 
 # ---------------------------------------- CONCATENATION BASED FUSION CODE --------------------------------------------
 
+# Define Frame_PI_generator class that generates video frames and corresponding persistence images
+class Frame_PI_generator:
+
+    # __init__ function to initialize instance attributes
+    def __init__(self, path, n_frames, training = False):
+        self.path = path
+        self.n_frames = n_frames
+        self.training = training
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
+
+    # Function that returns lists of paths to video files and class names for each video
+    def get_files_and_class_names(self):
+
+        # Create lists of video paths and video class names
+        video_paths = list(self.path.glob('*/*.avi'))
+        classes = [p.parent.name for p in video_paths] 
+
+        # Return lists
+        return video_paths, classes
+
+    # __call__ function that yields video frames with their respective label
+    def __call__(self):
+
+        # Call function to get video paths and class names
+        video_paths, classes = self.get_files_and_class_names()
+
+        # Create a list of tuples containing video paths and their respective class
+        pairs = list(zip(video_paths, classes))
+
+        # If training is True, mix up pairs within pairs list
+        if self.training:
+            random.seed(0)
+            random.shuffle(pairs)
+
+        # Loop through each tuple in pairs list
+        for path, name in pairs:
+
+            # Get video frames
+            video_frames = frames_from_video_file(path, self.n_frames) 
+
+            # Get label
+            label = self.class_ids_for_name[name]
+            
+            # Initialize lists
+            simplex_trees_list = []
+            persistence_images_list = []
+            
+            # Get point clouds from video frames
+            point_clouds = generate_point_clouds(video_frames, chosen_test)
+
+            # Generate simplex trees from point clouds and add to list
+            for point_cloud in point_clouds:
+                simplex_tree = generate_st(point_cloud)
+                simplex_trees_list.append(simplex_tree)
+
+            # Loop through simplex tree list to generate persistence images list
+            for simplex_tree in simplex_trees_list:
+
+                # Generate persistence image
+                persistence_image = generate_persistence_image(simplex_tree)
+
+                # Add persistence image to output list
+                persistence_images_list.append(persistence_image)
+
+            # Initialize list
+            reshaped_pis = []
+
+            # Loop through persistence images to reshape them
+            for pi in persistence_images_list:
+
+                # If current persistence image is "None," set current persistence image to a tensor of desired shape filled with zeros
+                if pi is None:
+                    pi = tf.zeros((height,width,1), dtype = tf.float32)
+
+                else:
+                    # Reshape to desired shape
+                    pi = tf.reshape(pi, [height, width, 1])
+
+                # Add reshaped pi to list
+                reshaped_pis.append(pi)
+
+            # Check that video frames are aligned with corresponding persistence images
+            if len(video_frames) != len(reshaped_pis):
+                print("ERROR: NUMBER OF VIDEO FRAMES DOES NOT MATCH NUMBER OF GENERATED PERSISTENCE IMAGES")
+
+            # Yield video frames, persistence images and the respective label
+            yield (video_frames, reshaped_pis), label
+
 # Define Concatenated_frame_generator class that generates concatenations of video frames and persistence images
 class Concatenated_frame_generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, pis_list):
+    def __init__(self, x_ds, IQR, median):
         self.x_ds = x_ds
-        self.pis_list = pis_list
+        self.IQR = IQR
+        self.median = median
 
-    # __call__ function that yields video frames with their respective label
+    # __call__ function that yields concatenated video frames and their respective label
     def __call__(self):
-        
-        # Initialize index tracker
-        index = 0
 
-        # Loop through frames and labels within inputted dataset
-        for frames, label in self.x_ds:
+        # Loop through frames, persistence images and labels within inputted dataset
+        for (frames, pis), label in self.x_ds:
             
             # Initialize list of concatenated frames
             concatenated_frames = []
 
-            # Loop through frames
-            for frame in frames:
-                
-                # Define current persistence image with current index
-                cur_pi = self.pis_list[index]
+            # Loop through frames and persistence images within dataset
+            for frame, pi in zip(frames, pis):
 
-                # If current persistence image is "None," set current persistence image tensor to a tensor of desired shape filled with zeros
-                if cur_pi is None:
-                    cur_pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+                # Convert persistence image to numpy
+                numpy_pi = pi.numpy()
 
-                else:
-                    # Convert current persistence image to a tensor
-                    cur_pi_tensor = tf.convert_to_tensor(cur_pi, dtype = tf.float32)
+                # Standardize persistence image
+                standardized_pi = (numpy_pi - self.median) / self.IQR
 
-                    # Reshape tensor to desired shape
-                    cur_pi_tensor = tf.reshape(cur_pi_tensor, [height, width, 1])
+                # Convert persistence image to a tensor
+                pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
 
-                # Concatenate video frame and current persistence image tensor
-                concatenated_frame = tf.concat([frame, cur_pi_tensor], axis = -1)
+                # Concatenate video frame and persistence image tensor
+                concatenated_frame = tf.concat([frame, pi_tensor], axis = -1)
 
                 # Append concatenated frame to concatenated frames list
                 concatenated_frames.append(concatenated_frame)
-                
-                # Set index for next loop
-                index += 1
 
             # Make concatenated frames list an array
             concatenated_frames_array = np.array(concatenated_frames)
@@ -466,25 +537,34 @@ class Three_channel_concatenated_frame_generator:
 # Function to test concatenation based fusion
 def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
-    # Get topological features from the datasets
-    train_persistence_images_list, median, IQR = tf_extraction_ds(train_ds, "Training", training_val = True)
-    val_persistence_images_list = tf_extraction_ds(val_ds, "Validation", training_val = False)
-    test_persistence_images_list = tf_extraction_ds(test_ds, "Test", training_val = False)
+    # Initialize list
+    train_persistence_images = []
 
-    # Standardize persistence images and make into a list
-    train_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in train_persistence_images_list]
-    vali_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in val_persistence_images_list]
-    test_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in test_persistence_images_list]
-    
+    # Loop through training dataset
+    for (frames, pis), label in train_ds:
+
+        # Loop through persistence images and add them to list
+        for pi in pis:
+            if pi is not None:
+                pi = pi.numpy()
+                train_persistence_images.append(pi)
+
+    # Obtain all pixel values from persistence images
+    concatenated_pi_list = np.concatenate([pi.ravel() for pi in train_persistence_images if pi is not None])
+
+    # Calculate IQR and median of pixel values
+    IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+    median_pi_val = np.median(concatenated_pi_list)
+
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation and testing datasets
-    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_ds, train_standardized_pi_list), 
+    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_ds, IQR, median_pi_val), 
                                                                 output_signature = output_signature)
-    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_ds, vali_standardized_pi_list), 
+    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_ds, IQR, median_pi_val), 
                                                                 output_signature = output_signature)
-    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_ds, test_standardized_pi_list), 
+    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_ds, IQR, median_pi_val), 
                                                                 output_signature = output_signature)
 
     # Make versions of datasets that repeat for training
