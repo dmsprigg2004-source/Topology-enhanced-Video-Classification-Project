@@ -34,12 +34,12 @@ from openpyxl import Workbook
 def get_test_settings():
 
     # Define desired test settings
-    num_categories = 25
-    splits = {"train": 35, "val": 5, "test": 10}
+    num_categories = 15
+    splits = {"train": 70, "val": 10, "test": 20}
     epochs = 150
     height = 112
     width = 112
-    n_frames = 8
+    n_frames = 16
     batch_size = 8
 
     # Calculate steps per epoch and validation steps
@@ -223,9 +223,6 @@ def frames_from_video_file(video_path, n_frames, output_size = (height,width)):
 
         # Calculate valid frame step
         frame_step = max(1, math.floor(video_length / n_frames))
-
-        # Print message indicating frame step less than 5 was used
-        print("Frame step set less than 5")
 
     else:
         # Set frame step to 5
