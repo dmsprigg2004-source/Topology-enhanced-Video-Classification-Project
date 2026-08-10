@@ -60,25 +60,36 @@ def main():
     # Create subset directories
     subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir)
 
-    # Define output signature
-    output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)), 
-                        tf.TensorSpec(shape = (), dtype = tf.int16))
-    
-    # Generate training, validation and testing datasets
-    train_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['train'], n_frames, training=True), 
-                                              output_signature = output_signature)
-    val_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
-    test_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
-
     # Obtain early stoppage callback
     callback = early_stoppage()
-
+    
     # Test concatenation based fusion if selected
     if chosen_test == "Concatenation":
+
+        # Define output signature
+        output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)), 
+                        tf.TensorSpec(shape = (), dtype = tf.int16))
+    
+        # Generate training, validation and testing datasets
+        train_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['train'], n_frames, training=True), 
+                                                output_signature = output_signature)
+        val_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
+        test_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
+    
         test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     # Test 3 channel concatenation based fusion if selected
     elif chosen_test == "3 Channel Concatenation":
+
+        # Define output signature
+        output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+        
+        # Generate training, validation and testing datasets
+        train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
+                                                output_signature = output_signature)
+        val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
+        test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+    
         test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     # Save results to folder if wanted
@@ -209,57 +220,6 @@ def generate_persistence_image(simplex_tree):
 
     # Return persistence image
     return persistence_image
-
-# Function that takes a dataset and returns a list of persistence images
-def tf_extraction_ds(x_ds, name, training_val):
-    
-    # Initialize dictionary and count variable
-    frames_dict = {}
-    count = 0
-
-    # Loop through all video frames in the dataset to create a frame dicitonary
-    for frames, label in x_ds:
-        frames_dict[f"{label}.{count}"] = frames
-        count += 1
-    
-    # Initialize lists
-    point_cloud_list = []
-    simplex_trees_list = []
-    persistence_images_list = []
-
-    # Loop through frame dictionary to generate point cloud list
-    for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Generating point clouds"):
-        point_cloud_list.extend(generate_point_clouds(frames, chosen_test))
-
-    # Loop through point cloud list to generate simplex tree list
-    for point_cloud in tqdm(point_cloud_list, desc= f"{name} - Generating simplex trees"):
-        simplex_tree = generate_st(point_cloud)
-        simplex_trees_list.append(simplex_tree)
-    
-    # Loop through simplex tree list to generate persistence images list
-    for simplex_tree in tqdm(simplex_trees_list, desc= f"{name} - Generating persistence images"):
-
-        # Generate persistence image
-        persistence_image = generate_persistence_image(simplex_tree)
-
-        # Add persistence image to output list
-        persistence_images_list.append(persistence_image)
-
-    # If training is true get values for standardization
-    if training_val == True:
-
-        # Obtain all pixel values from persistence images
-        concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
-
-        # Calculate IQR and median of pixel values
-        IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
-        median_pi_val = np.median(concatenated_pi_list)
-
-        # Return persistence images list along with median and IQR of pixel values
-        return persistence_images_list, median_pi_val, IQR
-
-    # Return persistence images list
-    return persistence_images_list
 
 # Function that takes a list of frames and returns a list of persistence images
 def tf_extraction_list(frame_list, name, train_val):
