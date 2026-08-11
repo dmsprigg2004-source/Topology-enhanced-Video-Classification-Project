@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tqdm import tqdm
 import pathlib
 import cv2
 import numpy as np
@@ -75,7 +74,9 @@ def main():
                                                 output_signature = output_signature)
         val_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
         test_ds = tf.data.Dataset.from_generator(Frame_PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
-    
+
+        print("Datasets created")
+
         test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
     # Test 3 channel concatenation based fusion if selected
@@ -89,6 +90,8 @@ def main():
                                                 output_signature = output_signature)
         val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
         test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+
+        print("Datasets created")
     
         test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
 
@@ -360,43 +363,17 @@ class Frame_PI_generator:
 class Concatenated_frame_generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, IQR, median):
-        self.x_ds = x_ds
-        self.IQR = IQR
-        self.median = median
+    def __init__(self, concatenated_frames_list):
+        self.concatenated_frames_list = concatenated_frames_list
 
     # __call__ function that yields concatenated video frames and their respective label
     def __call__(self):
 
-        # Loop through frames, persistence images and labels within inputted dataset
-        for (frames, pis), label in self.x_ds:
-            
-            # Initialize list of concatenated frames
-            concatenated_frames = []
-
-            # Loop through frames and persistence images within dataset
-            for frame, pi in zip(frames, pis):
-
-                # Convert persistence image to numpy
-                numpy_pi = pi.numpy()
-
-                # Standardize persistence image
-                standardized_pi = (numpy_pi - self.median) / self.IQR
-
-                # Convert persistence image to a tensor
-                pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
-
-                # Concatenate video frame and persistence image tensor
-                concatenated_frame = tf.concat([frame, pi_tensor], axis = -1)
-
-                # Append concatenated frame to concatenated frames list
-                concatenated_frames.append(concatenated_frame)
-
-            # Make concatenated frames list an array
-            concatenated_frames_array = np.array(concatenated_frames)
+        # Loop through concatenated frames and labels within inputted list
+        for (frames, label) in self.concatenated_frames_list:
 
             # Yield concatenated frames array and its respective label
-            yield concatenated_frames_array, label
+            yield frames, label
 
 # Funciton that splits video frames into frames representing one colour channel each
 def split_frames(x_ds):
@@ -516,15 +493,110 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
     IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
     median_pi_val = np.median(concatenated_pi_list)
 
+    # Initialize lists
+    train_concatenated_frames_list = []
+    val_concatenated_frames_list = []
+    test_concatenated_frames_list = []
+
+    # Loop through frames, persistence images and labels within training dataset
+    for (frames, pis), label in train_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Loop through frames and persistence images within dataset
+        for frame, pi in zip(frames, pis):
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Concatenate video frame and persistence image tensor
+            concatenated_frame = tf.concat([frame, pi_tensor], axis = -1)
+
+            # Add frame to list
+            concatenated_frames.append(concatenated_frame)
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        train_concatenated_frames_list.append((concatenated_frames_array, label))
+
+    # Loop through frames, persistence images and labels within validation dataset
+    for (frames, pis), label in val_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Loop through frames and persistence images within dataset
+        for frame, pi in zip(frames, pis):
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Concatenate video frame and persistence image tensor
+            concatenated_frame = tf.concat([frame, pi_tensor], axis = -1)
+
+            # Add frame to list
+            concatenated_frames.append(concatenated_frame)
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        val_concatenated_frames_list.append((concatenated_frames_array, label))
+
+    # Loop through frames, persistence images and labels within testing dataset
+    for (frames, pis), label in test_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Loop through frames and persistence images within dataset
+        for frame, pi in zip(frames, pis):
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Concatenate video frame and persistence image tensor
+            concatenated_frame = tf.concat([frame, pi_tensor], axis = -1)
+
+            # Add frame to list
+            concatenated_frames.append(concatenated_frame)
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        test_concatenated_frames_list.append((concatenated_frames_array, label))
+        
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 4), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation and testing datasets
-    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_ds, IQR, median_pi_val), 
+    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_concatenated_frames_list), 
                                                                 output_signature = output_signature)
-    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_ds, IQR, median_pi_val), 
+    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_concatenated_frames_list), 
                                                                 output_signature = output_signature)
-    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_ds, IQR, median_pi_val), 
+    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_concatenated_frames_list), 
                                                                 output_signature = output_signature)
 
     # Make versions of datasets that repeat for training
