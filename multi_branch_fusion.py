@@ -58,7 +58,7 @@ def main():
     UCF101_dir = pathlib.Path('./UCF101')
     
     # Create subset directories
-    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
+    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir)
 
     # Define output signature
     output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)),
@@ -96,16 +96,48 @@ def main():
     IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
     median_pi_val = np.median(concatenated_pi_list)
 
+    # Initialize lists
+    train_standardized_frame_pi_list = []
+    val_standardized_frame_pi_list = []
+    test_standardized_frame_pi_list = []
+
+    # Loop through training dataset
+    for (video_frames, pi_array), label in train_ds:
+        
+        # Standardize persistence images
+        pi_array = (pi_array - median_pi_val) / IQR
+
+        # Append video frames and standardized persistence images with their respective label
+        train_standardized_frame_pi_list.append(((video_frames, pi_array), label))
+
+    # Loop through validation dataset
+    for (video_frames, pi_array), label in val_ds:
+        
+        # Standardize persistence images
+        pi_array = (pi_array - median_pi_val) / IQR
+
+        # Append video frames and standardized persistence images with their respective label
+        val_standardized_frame_pi_list.append(((video_frames, pi_array), label))
+
+    # Loop through testing dataset
+    for (video_frames, pi_array), label in test_ds:
+        
+        # Standardize persistence images
+        pi_array = (pi_array - median_pi_val) / IQR
+
+        # Append video frames and standardized persistence images with their respective label
+        test_standardized_frame_pi_list.append(((video_frames, pi_array), label))
+
     # Define output signature
     output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
                          tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32)), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Create datasets with standardized persistence images
-    standardized_train_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(train_ds, median_pi_val, IQR),
+    standardized_train_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(train_standardized_frame_pi_list),
                                                            output_signature = output_signature)
-    standardized_val_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(val_ds, median_pi_val, IQR),
+    standardized_val_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(val_standardized_frame_pi_list),
                                                          output_signature = output_signature)
-    standardized_test_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(test_ds, median_pi_val, IQR),
+    standardized_test_ds = tf.data.Dataset.from_generator(Standardized_Frame_PI_Generator(test_standardized_frame_pi_list),
                                                           output_signature = output_signature)
     print("Complete")
 
@@ -370,19 +402,14 @@ class Frame_PI_Generator:
 class Standardized_Frame_PI_Generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, median_pi_val, IQR):
-        self.x_ds = x_ds
-        self.median_pi_val = median_pi_val
-        self.IQR = IQR
-
+    def __init__(self, frame_pi_list):
+        self.frame_pi_list = frame_pi_list
+        
     # __call__ function that yields video frames and standardized persistence images with their respective label
     def __call__(self):
 
-        # Loop through input dataset
-        for (video_frames, pi_array), label in self.x_ds:
-
-            # Standardize persistence images
-            pi_array = (pi_array - self.median_pi_val) / self.IQR
+        # Loop through input list
+        for (video_frames, pi_array), label in self.frame_pi_list:
 
             # Yield video frames and standardized persistence images with their respective label
             yield (video_frames, pi_array), label
