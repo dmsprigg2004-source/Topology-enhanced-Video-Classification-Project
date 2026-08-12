@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tqdm import tqdm
 import pathlib
 import cv2
 import numpy as np
@@ -23,6 +22,7 @@ from gtda.images import ImageToPointCloud
 import gudhi as gd
 from gudhi.representations import PersistenceImage
 import open3d
+import random
 
 from utils import create_subset_dirs
 from utils import FrameGenerator
@@ -36,6 +36,7 @@ from utils import get_test_settings
 from utils import early_stoppage
 from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
+from utils import frames_from_video_file
 
 import math
 
@@ -43,7 +44,7 @@ import math
 num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
 
 # Define chosen test
-chosen_test = "PI Only"
+chosen_test = "PI_only"
 
 # Choose whether to save results to folder with specific name
 save_output = True
@@ -55,19 +56,21 @@ def main():
     UCF101_dir = pathlib.Path('./UCF101')
     
     # Create subset directories
-    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir, splits = splits)
-
-    # Define output signature
-    output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
-    
-    # Generate training, validation and testing datasets
-    train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
-                                              output_signature = output_signature)
-    val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
-    test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+    subset_dirs = create_subset_dirs(num_categories = num_categories, UCF101_dir = UCF101_dir)
 
     # Obtain early stoppage callback
     callback = early_stoppage()
+
+    # Define output signature
+    output_signature = (tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+
+    # Generate training, validation and testing datasets
+    train_ds = tf.data.Dataset.from_generator(PI_generator(subset_dirs['train'], n_frames, training=True), 
+                                            output_signature = output_signature)
+    val_ds = tf.data.Dataset.from_generator(PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
+    test_ds = tf.data.Dataset.from_generator(PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
+
+    print("Datasets created")
 
     # Test pi only
     test_pi_only(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
@@ -120,11 +123,8 @@ def generate_point_clouds(video_frames, chosen_test):
     # For loop to access individual frames
     for frame in video_frames:
 
-        # Convert to NumPy ndarray
-        np_frame = frame.numpy()
-
         # Convert frame to greyscale form
-        grey_image = cv2.cvtColor(np_frame, cv2.COLOR_RGB2GRAY)
+        grey_image = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
         # Rescale grey image
         frame = (grey_image * 255).astype(np.uint8)
@@ -170,197 +170,296 @@ def generate_persistence_image(simplex_tree):
     if simplex_tree is None:
         return None
     
-    # Code to be revised later
+    # Obtain intervals in dimensions 1 and 0 of simplex tree
     intervals1 = simplex_tree.persistence_intervals_in_dimension(1)
     intervals0 = simplex_tree.persistence_intervals_in_dimension(0)
 
+    # Initialize filtered intervals list
     filtered_intervals = []
 
+    # Loop through intervals in dimension 1 and add those whose birth and death are over
+    # 0.75 apart to filtered intervals list
     for interval in intervals1:
+        if interval[1] - interval[0] > 0.75:
             filtered_intervals.append(interval)
 
+    # Loop through intervals in dimension 0 and add those whose birth and death are over
+    # 0.75 apart and whose death value is not infinite to filtered intervals list
     for interval in intervals0:
-        if not math.isinf(interval[1]):
+        if not math.isinf(interval[1]) and interval[1] - interval[0] > 0.75:
             filtered_intervals.append(interval)
 
+    # Make filtered intervals list an array
     filtered_intervals = np.array(filtered_intervals)
-
-    filtered_2 = []
-
-    for interval in filtered_intervals:
-        if interval[1] - interval[0] > .75:
-            filtered_2.append(interval)
-
-    filtered_2 = np.array(filtered_2)
 
     # Create persistence image
     persistence_image = PersistenceImage(bandwidth=0.8, weight=lambda x: x[1]**2,
                                     im_range=[0,8,0,8], resolution=[height,width])
-    persistence_image = persistence_image.fit_transform([filtered_2])
+    persistence_image = persistence_image.fit_transform([filtered_intervals])
 
     # Return persistence image
     return persistence_image
 
-# Function that takes a dataset and returns a list of persistence images
-def tf_extraction_ds(x_ds, name, training_val):
-    
-    # Initialize dictionary and count variable
-    frames_dict = {}
-    count = 0
-
-    # Loop through all video frames in the dataset to create a frame dicitonary
-    for frames, label in x_ds:
-        frames_dict[f"{label}.{count}"] = frames
-        count += 1
-    
-    # Initialize lists
-    point_cloud_list = []
-    simplex_trees_list = []
-    persistence_images_list = []
-
-    # Loop through frame dictionary to generate point cloud list
-    for label, frames in tqdm(frames_dict.items(), desc= f"{name} - Generating point clouds"):
-        point_cloud_list.extend(generate_point_clouds(frames, chosen_test))
-
-    # Loop through point cloud list to generate simplex tree list
-    for point_cloud in tqdm(point_cloud_list, desc= f"{name} - Generating simplex trees"):
-        simplex_tree = generate_st(point_cloud)
-        simplex_trees_list.append(simplex_tree)
-    
-    # Loop through simplex tree list to generate persistence images list
-    for simplex_tree in tqdm(simplex_trees_list, desc= f"{name} - Generating persistence images"):
-
-        # Generate persistence image
-        persistence_image = generate_persistence_image(simplex_tree)
-
-        # Add persistence image to output list
-        persistence_images_list.append(persistence_image)
-
-    # If training is true get values for standardization
-    if training_val == True:
-
-        # Obtain all pixel values from persistence images
-        concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
-
-        # Calculate IQR and median of pixel values
-        IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
-        median_pi_val = np.median(concatenated_pi_list)
-
-        # Return persistence images list along with median and IQR of pixel values
-        return persistence_images_list, median_pi_val, IQR
-
-    # Return persistence images list
-    return persistence_images_list
-
 # ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
 
-# ---------------------------------------- PERSISTENCE IMAGE GENERATION CODE --------------------------------------------
+# ----------------------------------------------- PI ONLY BASED CODE --------------------------------------------------
 
-# Define Persistence_image_generator class that generates persistence images
-class Persistence_image_generator:
+# Define PI_generator class that generates persistence images with corresponding label
+class PI_generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, pis_list):
-        self.x_ds = x_ds
-        self.pis_list = pis_list
+    def __init__(self, path, n_frames, training = False):
+        self.path = path
+        self.n_frames = n_frames
+        self.training = training
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
-    # __call__ function that yields persistence images with their respective label
+    # Function that returns lists of paths to video files and class names for each video
+    def get_files_and_class_names(self):
+
+        # Create lists of video paths and video class names
+        video_paths = list(self.path.glob('*/*.avi'))
+        classes = [p.parent.name for p in video_paths] 
+
+        # Return lists
+        return video_paths, classes
+
+    # __call__ function that yields persistence images with the respective label
     def __call__(self):
-        
-        # Initialize index tracker
-        index = 0
 
-        # Loop through frames and labels within inputted dataset
-        for frames, label in self.x_ds:
+        # Call function to get video paths and class names
+        video_paths, classes = self.get_files_and_class_names()
+
+        # Create a list of tuples containing video paths and their respective class
+        pairs = list(zip(video_paths, classes))
+
+        # If training is True, mix up pairs within pairs list
+        if self.training:
+            random.seed(0)
+            random.shuffle(pairs)
+
+        # Loop through each tuple in pairs list
+        for path, name in pairs:
+
+            # Get video frames
+            video_frames = frames_from_video_file(path, self.n_frames) 
+
+            # Get label
+            label = self.class_ids_for_name[name]
             
-            # Initialize list of persistence image tensors
-            pi_tensor_list = []
+            # Initialize lists
+            simplex_trees_list = []
+            persistence_images_list = []
+            
+            # Get point clouds from video frames
+            point_clouds = generate_point_clouds(video_frames, chosen_test)
 
-            # Loop through frames
-            for frame in frames:
-                
-                # Define current persistence image with current index
-                cur_pi = self.pis_list[index]
+            # Generate simplex trees from point clouds and add to list
+            for point_cloud in point_clouds:
+                simplex_tree = generate_st(point_cloud)
+                simplex_trees_list.append(simplex_tree)
 
-                # If current persistence image is "None," set current persistence image tensor to a tensor of desired shape filled with zeros
-                if cur_pi is None:
-                    cur_pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+            # Loop through simplex tree list to generate persistence images list
+            for simplex_tree in simplex_trees_list:
+
+                # Generate persistence image
+                persistence_image = generate_persistence_image(simplex_tree)
+
+                # Add persistence image to output list
+                persistence_images_list.append(persistence_image)
+
+            # Initialize list
+            reshaped_pis = []
+
+            # Loop through persistence images to reshape them
+            for pi in persistence_images_list:
+
+                # If current persistence image is "None," set current persistence image to a tensor of desired shape filled with zeros
+                if pi is None:
+                    pi = tf.zeros((height,width,1), dtype = tf.float32)
 
                 else:
-                    # Convert current persistence image to a tensor
-                    cur_pi_tensor = tf.convert_to_tensor(cur_pi, dtype = tf.float32)
+                    # Reshape to desired shape
+                    pi = tf.reshape(pi, [height, width, 1])
 
-                    # Reshape tensor to desired shape
-                    cur_pi_tensor = tf.reshape(cur_pi_tensor, [height, width, 1])
+                # Add reshaped pi to list
+                reshaped_pis.append(pi)
 
-                # Append persistence image tensor to list
-                pi_tensor_list.append(cur_pi_tensor)
-                
-                # Set index for next loop
-                index += 1
+            # Check that video frames are aligned with corresponding persistence images
+            if len(video_frames) != len(reshaped_pis):
+                print("ERROR: NUMBER OF VIDEO FRAMES DOES NOT MATCH NUMBER OF GENERATED PERSISTENCE IMAGES")
 
-            # Make persistence image tensor list into an array
-            pi_tensor_array = np.array(pi_tensor_list)
+            # Yield video frames, persistence images and the respective label
+            yield reshaped_pis, label
 
-            # Yield persistence image tensor array and its respective label
-            yield pi_tensor_array, label
+# Define Standardized_PI_generator class that generates persistence images
+class Standardized_PI_generator:
 
-# ------------------------------------- PERSISTENCE IMAGE GENERATION CODE ----------------------------------------
+    # __init__ function to initialize instance attributes
+    def __init__(self, pi_list):
+        self.pi_list = pi_list
+
+    # __call__ function that yields persistence images and their respective label
+    def __call__(self):
+
+        # Loop through persistence images and labels within inputted list
+        for (pis, label) in self.pi_list:
+
+            # Yield persistence images and respective label
+            yield pis, label
+
+# ------------------------------------------- END OF PI ONLY BASED CODE -----------------------------------------------
 
 # ------------------------------------------------ TEST BASED CODE ----------------------------------------------------
 
-# Function to test persistence image only test
+# Function to test pi only
 def test_pi_only(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
-    # Get topological features from the datasets
-    train_persistence_images_list, median, IQR = tf_extraction_ds(train_ds, "Training", training_val = True)
-    val_persistence_images_list = tf_extraction_ds(val_ds, "Validation", training_val = False)
-    test_persistence_images_list = tf_extraction_ds(test_ds, "Test", training_val = False)
+    # Initialize list
+    train_persistence_images = []
 
-    # Standardize persistence images and make into a list
-    train_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in train_persistence_images_list]
-    vali_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in val_persistence_images_list]
-    test_standardized_pi_list = [(pi - median) / IQR if pi is not None else None for pi in test_persistence_images_list]
-    
+    # Loop through training dataset
+    for pis, label in train_ds:
+
+        # Loop through persistence images and add them to list
+        for pi in pis:
+            if pi is not None:
+                pi = pi.numpy()
+                train_persistence_images.append(pi)
+
+    # Obtain all pixel values from persistence images
+    concatenated_pi_list = np.concatenate([pi.ravel() for pi in train_persistence_images if pi is not None])
+
+    # Calculate IQR and median of pixel values
+    IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+    median_pi_val = np.median(concatenated_pi_list)
+
+    # Initialize lists
+    train_standardized_pi_list = []
+    val_standardized_pi_list = []
+    test_standardized_pi_list = []
+
+    # Loop through frames, persistence images and labels within training dataset
+    for pis, label in train_ds:
+
+        # Initialize standardized persistence images list
+        standardized_pis = []
+
+        # Loop through frames and persistence images within dataset
+        for pi in pis:
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Add frame to list
+            standardized_pis.append(pi_tensor)
+
+        # Make standardized persistence images list an array
+        standardized_pis_array = np.array(standardized_pis)
+
+        # Add standardized persistence images array and its respective label to list
+        train_standardized_pi_list.append((standardized_pis_array, label))
+
+    # Loop through frames, persistence images and labels within training dataset
+    for pis, label in val_ds:
+
+        # Initialize standardized persistence images list
+        standardized_pis = []
+
+        # Loop through frames and persistence images within dataset
+        for pi in pis:
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Add frame to list
+            standardized_pis.append(pi_tensor)
+
+        # Make standardized persistence images list an array
+        standardized_pis_array = np.array(standardized_pis)
+
+        # Add standardized persistence images array and its respective label to list
+        val_standardized_pi_list.append((standardized_pis_array, label))
+
+    # Loop through frames, persistence images and labels within training dataset
+    for pis, label in test_ds:
+
+        # Initialize standardized persistence images list
+        standardized_pis = []
+
+        # Loop through frames and persistence images within dataset
+        for pi in pis:
+
+            # Convert persistence image to numpy
+            numpy_pi = pi.numpy()
+
+            # Standardize persistence image
+            standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+            # Convert persistence image to a tensor
+            pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+            # Add frame to list
+            standardized_pis.append(pi_tensor)
+
+        # Make standardized persistence images list an array
+        standardized_pis_array = np.array(standardized_pis)
+
+        # Add standardized persistence images array and its respective label to list
+        test_standardized_pi_list.append((standardized_pis_array, label))
+        
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 1), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation and testing datasets
-    train_persistence_images = tf.data.Dataset.from_generator(Persistence_image_generator(train_ds, train_standardized_pi_list), 
+    train_standardized_pis = tf.data.Dataset.from_generator(Standardized_PI_generator(train_standardized_pi_list), 
                                                                 output_signature = output_signature)
-    val_persistence_images = tf.data.Dataset.from_generator(Persistence_image_generator(val_ds, vali_standardized_pi_list), 
+    val_standardized_pis = tf.data.Dataset.from_generator(Standardized_PI_generator(val_standardized_pi_list), 
                                                                 output_signature = output_signature)
-    test_persistence_images = tf.data.Dataset.from_generator(Persistence_image_generator(test_ds, test_standardized_pi_list), 
+    test_standardized_pis = tf.data.Dataset.from_generator(Standardized_PI_generator(test_standardized_pi_list), 
                                                                 output_signature = output_signature)
 
     # Make versions of datasets that repeat for training
-    repeat_train_persistence_images = train_persistence_images.repeat().batch(batch_size)
-    repeat_val_persistence_images = val_persistence_images.repeat().batch(batch_size)
+    repeat_train_standardized_pis = train_standardized_pis.repeat().batch(batch_size)
+    repeat_val_standardized_pis = val_standardized_pis.repeat().batch(batch_size)
 
     # Batch data into desired sizes
-    train_persistence_images = train_persistence_images.batch(batch_size)
-    val_persistence_images = val_persistence_images.batch(batch_size)
-    test_persistence_images = test_persistence_images.batch(batch_size)
+    train_standardized_pis = train_standardized_pis.batch(batch_size)
+    val_standardized_pis = val_standardized_pis.batch(batch_size)
+    test_standardized_pis = test_standardized_pis.batch(batch_size)
 
     # Define input shape
     input_shape = (None, n_frames, height, width, 1)
 
     # Call function to create the 3D CNN model
-    model = create_3D_CNN(train_persistence_images, input_shape)
+    model = create_3D_CNN(train_standardized_pis, input_shape)
 
     # Prepare model for training with the Adam optimizer and SparseCategoricalCrossentropy loss function
     model.compile(loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                     optimizer = keras.optimizers.legacy.Adam(learning_rate = 0.0001), metrics = ['accuracy'])
 
     # Train the model and obtain model history using model.fit()
-    history = model.fit(x = repeat_train_persistence_images, epochs = epochs, validation_data = repeat_val_persistence_images, 
+    history = model.fit(x = repeat_train_standardized_pis, epochs = epochs, validation_data = repeat_val_standardized_pis, 
                         steps_per_epoch = steps_per_epoch, validation_steps = validation_steps, callbacks=[callback])
 
     # Call function to plot history of model training performance
     plot_history(history)
 
     # Evaluate model to get accuracy and loss values
-    model_accuracy_and_loss = model.evaluate(test_persistence_images, return_dict=True)
+    model_accuracy_and_loss = model.evaluate(test_standardized_pis, return_dict=True)
 
     # Obtain model accuracy
     model_accuracy = model_accuracy_and_loss["accuracy"]
@@ -370,11 +469,11 @@ def test_pi_only(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_d
     labels = list(fg.class_ids_for_name.keys())
 
     # Call funciton to get actual and predicted values from the training dataset, then plot confusion matrix
-    actual, predicted = get_actual_predicted_labels(train_persistence_images, model)
+    actual, predicted = get_actual_predicted_labels(train_standardized_pis, model)
     plot_confusion_matrix(actual, predicted, labels, 'training')
 
     # Call funciton to get actual and predicted values from the test dataset, then plot confusion matrix
-    actual, predicted = get_actual_predicted_labels(test_persistence_images, model)
+    actual, predicted = get_actual_predicted_labels(test_standardized_pis, model)
     plot_confusion_matrix(actual, predicted, labels, 'test')
 
     # Call function to calculate precision and recall values
