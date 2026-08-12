@@ -193,33 +193,32 @@ def generate_persistence_image(simplex_tree):
     if simplex_tree is None:
         return None
     
-    # Code to be revised later
+    # Obtain intervals in dimensions 1 and 0 of simplex tree
     intervals1 = simplex_tree.persistence_intervals_in_dimension(1)
     intervals0 = simplex_tree.persistence_intervals_in_dimension(0)
 
+    # Initialize filtered intervals list
     filtered_intervals = []
 
+    # Loop through intervals in dimension 1 and add those whose birth and death are over
+    # 0.75 apart to filtered intervals list
     for interval in intervals1:
+        if interval[1] - interval[0] > 0.75:
             filtered_intervals.append(interval)
 
+    # Loop through intervals in dimension 0 and add those whose birth and death are over
+    # 0.75 apart and whose death value is not infinite to filtered intervals list
     for interval in intervals0:
-        if not math.isinf(interval[1]):
+        if not math.isinf(interval[1]) and interval[1] - interval[0] > 0.75:
             filtered_intervals.append(interval)
 
+    # Make filtered intervals list an array
     filtered_intervals = np.array(filtered_intervals)
-
-    filtered_2 = []
-
-    for interval in filtered_intervals:
-        if interval[1] - interval[0] > .75:
-            filtered_2.append(interval)
-
-    filtered_2 = np.array(filtered_2)
 
     # Create persistence image
     persistence_image = PersistenceImage(bandwidth=0.8, weight=lambda x: x[1]**2,
                                     im_range=[0,8,0,8], resolution=[height,width])
-    persistence_image = persistence_image.fit_transform([filtered_2])
+    persistence_image = persistence_image.fit_transform([filtered_intervals])
 
     # Return persistence image
     return persistence_image
