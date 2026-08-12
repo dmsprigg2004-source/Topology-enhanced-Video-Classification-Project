@@ -99,8 +99,8 @@ def downsample_point_cloud(point_cloud):
     # Define point cloud points
     pcd.points = open3d.utility.Vector3dVector(three_dimensional_pc)
 
-    # Downsample point cloud using a voxel of size 3
-    downsampled_point_cloud = pcd.voxel_down_sample(voxel_size=3)
+    # Downsample point cloud using a voxel of size 1.5
+    downsampled_point_cloud = pcd.voxel_down_sample(voxel_size=1.5)
 
     # Convert point cloud to an array
     np_point_cloud = np.asarray(downsampled_point_cloud.points)
