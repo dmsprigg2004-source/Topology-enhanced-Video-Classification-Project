@@ -54,19 +54,57 @@ def main():
     val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
     test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
+    # Initialize lists
+    train_ds_list = []
+    val_ds_list = []
+    test_ds_list = []
+
+    # Loop through training, validation and testing datasets and add values to lists
+    for video_frames, label in train_ds:
+        train_ds_list.append((video_frames, label))
+
+    for video_frames, label in val_ds:
+        val_ds_list.append((video_frames, label))
+
+    for video_frames, label in test_ds:
+        test_ds_list.append((video_frames, label))
+
+    # Create new datasets
+    new_train_ds = tf.data.Dataset.from_generator(FrameGenerator2(train_ds_list), 
+                                              output_signature = output_signature)
+    new_val_ds = tf.data.Dataset.from_generator(FrameGenerator2(val_ds_list), 
+                                              output_signature = output_signature)
+    new_test_ds = tf.data.Dataset.from_generator(FrameGenerator2(test_ds_list), 
+                                              output_signature = output_signature)
+
     print("Datasets created")
 
     # Obtain early stoppage callback
     callback = early_stoppage()
 
     # Test baseline model
-    test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback)
+    test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, new_train_ds, new_val_ds, new_test_ds, callback)
 
     # Save results to folder if wanted
     if save_output:
         save_results(results_file_name)
 
     return 
+
+# Define FrameGenerator2 class
+class FrameGenerator2:
+
+    # __init__ function to initialize instance attributes
+    def __init__(self, frame_list):
+        self.frame_list = frame_list
+
+    # __call__ function that yields video frames with their respective label
+    def __call__(self):
+
+        for (frames, label) in self.frame_list:
+            
+            # Yield video frames and its respective label
+            yield frames, label
 
 # Function to test baseline video classificaion model
 def test_baseline_model(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
