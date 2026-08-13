@@ -83,13 +83,14 @@ def main():
     elif chosen_test == "3 Channel Concatenation":
 
         # Define output signature
-        output_signature = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
+        output_signature = ((tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (None, None, None, None, 1), dtype = tf.float32)),
+                             tf.TensorSpec(shape = (), dtype = tf.int16))
         
         # Generate training, validation and testing datasets
-        train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['train'], n_frames, training=True), 
+        train_ds = tf.data.Dataset.from_generator(Frame_3_channel_PI_generator(subset_dirs['train'], n_frames, training=True), 
                                                 output_signature = output_signature)
-        val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['val'], n_frames), output_signature = output_signature)
-        test_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_dirs['test'], n_frames), output_signature = output_signature)
+        val_ds = tf.data.Dataset.from_generator(Frame_3_channel_PI_generator(subset_dirs['val'], n_frames), output_signature = output_signature)
+        test_ds = tf.data.Dataset.from_generator(Frame_3_channel_PI_generator(subset_dirs['test'], n_frames), output_signature = output_signature)
 
         print("Datasets created")
     
@@ -223,48 +224,6 @@ def generate_persistence_image(simplex_tree):
     # Return persistence image
     return persistence_image
 
-# Function that takes a list of frames and returns a list of persistence images
-def tf_extraction_list(frame_list, name, train_val):
-
-    # Initialize lists
-    simplex_trees_list = []
-    persistence_images_list = []
-
-    # Generate point clouds
-    print(f"{name} - Genrating point clouds...")
-    point_clouds = generate_point_clouds(frame_list, chosen_test)
-    print("Done")
-
-    # Generate simplex trees 
-    print(f"{name} - Generating simplex trees...")
-    for point_cloud in point_clouds:
-        simplex_tree = generate_st(point_cloud)
-        simplex_trees_list.append(simplex_tree)
-    print("Done")
-
-    # Generate persistence images
-    print(f"{name} - Generating persistence images...")
-    for tree in simplex_trees_list:
-        persistence_image = generate_persistence_image(tree)
-        persistence_images_list.append(persistence_image)
-    print("Done")
-
-    # If training is true get values for normalization
-    if train_val == True:
-
-        # Obtain all pixel values from persistence images
-        concatenated_pi_list = np.concatenate([pi.ravel() for pi in persistence_images_list if pi is not None])
-
-        # Calculate IQR and median of pixel values
-        IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
-        median_pi_val = np.median(concatenated_pi_list)
-
-        # Return persistence images list along with median and IQR of pixel values
-        return persistence_images_list, median_pi_val, IQR
-
-    # Return list of persistence images
-    return persistence_images_list
-
 # ----------------------------------- END OF TOPOLOGICAL FEATURE EXTRACTION CODE --------------------------------------
 
 # ---------------------------------------- CONCATENATION BASED FUSION CODE --------------------------------------------
@@ -375,96 +334,136 @@ class Concatenated_frame_generator:
             yield frames, label
 
 # Funciton that splits video frames into frames representing one colour channel each
-def split_frames(x_ds):
+def split_frames(frames):
 
     # Initialize lists
     red = []
     blue = []
     green = []
 
-    # Loop through frames within inputted dataset
-    for frames, label in x_ds:
+    # Loop through individual frames
+    for frame in frames:
 
-        # Loop through individual frames
-        for frame in frames:
+        # Convert to NumPy ndarray
+        np_frame = frame.numpy()
 
-            # Convert to NumPy ndarray
-            np_frame = frame.numpy()
+        # Rescale image
+        np_frame = (np_frame * 255).astype(np.uint8)
 
-            # Rescale image
-            np_frame = (np_frame * 255).astype(np.uint8)
+        # Split into colour channels
+        r, g, b = cv2.split(np_frame)
 
-            # Split into colour channels
-            r, g, b = cv2.split(np_frame)
-
-            # Append channels to lists
-            red.append(r)
-            blue.append(b)
-            green.append(g)
+        # Append channels to lists
+        red.append(r)
+        blue.append(b)
+        green.append(g)
 
     # Return lists
     return red, green, blue
 
-class Three_channel_concatenated_frame_generator:
+# Define Frame_3_channel_PI_generator class that generates video frames and corresponding persistence images
+class Frame_3_channel_PI_generator:
 
     # __init__ function to initialize instance attributes
-    def __init__(self, x_ds, red_pis_list, green_pis_list, blue_pis_list):
-        self.x_ds = x_ds
-        self.red_pis_list = red_pis_list
-        self.green_pis_list = green_pis_list
-        self.blue_pis_list = blue_pis_list
+    def __init__(self, path, n_frames, training = False):
+        self.path = path
+        self.n_frames = n_frames
+        self.training = training
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
-    # __call__ function that yields video frames with their respective label
+    # Function that returns lists of paths to video files and class names for each video
+    def get_files_and_class_names(self):
+
+        # Create lists of video paths and video class names
+        video_paths = list(self.path.glob('*/*.avi'))
+        classes = [p.parent.name for p in video_paths] 
+
+        # Return lists
+        return video_paths, classes
+
+    # __call__ function that yields video frames, persistence images and their respective label
     def __call__(self):
-        
-        # Initialize index tracker
-        index = 0
 
-        # Loop through frames and labels within inputted dataset
-        for frames, label in self.x_ds:
+        # Call function to get video paths and class names
+        video_paths, classes = self.get_files_and_class_names()
+
+        # Create a list of tuples containing video paths and their respective class
+        pairs = list(zip(video_paths, classes))
+
+        # If training is True, mix up pairs within pairs list
+        if self.training:
+            random.seed(0)
+            random.shuffle(pairs)
+
+        # Loop through each tuple in pairs list
+        for path, name in pairs:
+
+            # Get video frames
+            video_frames = frames_from_video_file(path, self.n_frames) 
+
+            # Get label
+            label = self.class_ids_for_name[name]
+
+            # Split frames into colour channels
+            red_frame_list, green_frame_list, blue_frame_list = split_frames(video_frames)
+
+            # Initialize colour channel persistence images list
+            colour_channel_pis = []
+
+            # Loop through colour channel frames
+            for frame_list in [red_frame_list, green_frame_list, blue_frame_list]:
             
-            # Initialize list of concatenated frames
-            concatenated_frames = []
-
-            # Loop through frames
-            for frame in frames:
+                # Initialize lists
+                simplex_trees_list = []
+                persistence_images_list = []
                 
-                # Define current persistence images with current index
-                red_cur_pi = self.red_pis_list[index]
-                green_cur_pi = self.green_pis_list[index]
-                blue_cur_pi = self.blue_pis_list[index]
+                # Get point clouds from video frames
+                point_clouds = generate_point_clouds(frame_list, chosen_test)
 
-                # If current persistence image is "None," set current persistence image tensor to a tensor of desired shape filled with zeros
-                if red_cur_pi is None or green_cur_pi is None or blue_cur_pi is None:
-                    cur_pi_tensor = tf.zeros((height,width,3), dtype = tf.float32)
+                # Generate simplex trees from point clouds and add to list
+                for point_cloud in point_clouds:
+                    simplex_tree = generate_st(point_cloud)
+                    simplex_trees_list.append(simplex_tree)
 
-                    # Concatenate video frame and current persistence image tensor
-                    concatenated_frame = tf.concat([frame, cur_pi_tensor], axis = -1)
+                # Loop through simplex tree list to generate persistence images list
+                for simplex_tree in simplex_trees_list:
 
-                else:
-                    # Convert current persistence images to tensors
-                    red_cur_pi_tensor = tf.convert_to_tensor(red_cur_pi, dtype = tf.float32)
-                    green_cur_pi_tensor = tf.convert_to_tensor(green_cur_pi, dtype = tf.float32)
-                    blue_cur_pi_tensor = tf.convert_to_tensor(blue_cur_pi, dtype = tf.float32)
+                    # Generate persistence image
+                    persistence_image = generate_persistence_image(simplex_tree)
 
-                    # Reshape tensors to desired shape
-                    red_cur_pi_tensor = tf.reshape(red_cur_pi_tensor, [height, width, 1])
-                    green_cur_pi_tensor = tf.reshape(green_cur_pi_tensor, [height, width, 1])
-                    blue_cur_pi_tensor = tf.reshape(blue_cur_pi_tensor, [height, width, 1])
+                    # Add persistence image to output list
+                    persistence_images_list.append(persistence_image)
 
-                    concatenated_frame = tf.concat([frame, red_cur_pi_tensor, green_cur_pi_tensor, blue_cur_pi_tensor], axis = -1)
+                # Initialize list
+                reshaped_pis = []
 
-                # Append concatenated frame to concatenated frames list
-                concatenated_frames.append(concatenated_frame)
-                
-                # Set index for next loop
-                index += 1
+                # Loop through persistence images to reshape them
+                for pi in persistence_images_list:
 
-            # Make concatenated frames list an array
-            concatenated_frames_array = np.array(concatenated_frames)
+                    # If current persistence image is "None," set current persistence image to a tensor of desired shape filled with zeros
+                    if pi is None:
+                        pi = tf.zeros((height,width,1), dtype = tf.float32)
 
-            # Yield concatenated frames array and its respective label
-            yield concatenated_frames_array, label
+                    else:
+                        # Reshape to desired shape
+                        pi = tf.reshape(pi, [height, width, 1])
+
+                    # Add reshaped pi to list
+                    reshaped_pis.append(pi)
+
+                # Append colour channel pis to list
+                colour_channel_pis.append(reshaped_pis)
+
+            # Loop through list within colour channel pi list
+            for colour_channel_pi_list in colour_channel_pis:
+
+                # Check that video frames are aligned with corresponding persistence images
+                if len(video_frames) != len(colour_channel_pi_list):
+                    print("ERROR: NUMBER OF VIDEO FRAMES DOES NOT MATCH NUMBER OF GENERATED PERSISTENCE IMAGES")
+
+            # Yield video frames, persistence images and the respective label
+            yield (video_frames, colour_channel_pis), label
 
 # ------------------------------------- END OF CONCATENATION BASED FUSION CODE ----------------------------------------
 
@@ -656,51 +655,219 @@ def test_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_di
 # Function to test 3 channel concatenation based fusion
 def test_3_channel_concatenation_based_fusion(steps_per_epoch, validation_steps, subset_dirs, train_ds, val_ds, test_ds, callback):
 
-    # Split frames into images representing single colour channels
-    red_train_list, green_train_list, blue_train_list = split_frames(train_ds)
-    red_val_list, green_val_list, blue_val_list = split_frames(val_ds)
-    red_test_list, green_test_list, blue_test_list = split_frames(test_ds)
+    # Initialize list
+    train_persistence_images = []
 
-    # Get topological features of training data
-    red_train_pi_list, red_median_pi_val, red_IQR = tf_extraction_list(red_train_list, "Training, red", train_val = True)
-    green_train_pi_list, green_median_pi_val, green_IQR = tf_extraction_list(green_train_list, "Training, green", train_val = True)
-    blue_train_pi_list, blue_median_pi_val, blue_IQR = tf_extraction_list(blue_train_list, "Training, blue", train_val = True)
+    # Loop through training dataset
+    for (frames, colour_channel_pis), label in train_ds:
 
-    # Get topological features of validaiton data
-    red_val_pi_list = tf_extraction_list(red_val_list, "Validation, red", train_val = False)
-    green_val_pi_list = tf_extraction_list(green_val_list, "Validation, green", train_val = False)
-    blue_val_pi_list = tf_extraction_list(blue_val_list, "Validation, blue", train_val = False)
+        # Loop through persistence images and add them to list
+        for pi_list in colour_channel_pis:
+            for pi in pi_list:
+                if pi is not None:
+                    pi = pi.numpy()
+                    train_persistence_images.append(pi)
 
-    # Get topological features of testing data
-    red_test_pi_list = tf_extraction_list(red_test_list, "Test, red", train_val = False)
-    green_test_pi_list = tf_extraction_list(green_test_list, "Test, green", train_val = False)
-    blue_test_pi_list = tf_extraction_list(blue_test_list, " Test, blue", train_val = False)
+    # Obtain all pixel values from persistence images
+    concatenated_pi_list = np.concatenate([pi.ravel() for pi in train_persistence_images if pi is not None])
 
-    print("Standardizing persistence images")
-    # Standardize persistence images and make into a list
-    red_train_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_train_pi_list]
-    red_vali_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_val_pi_list]
-    red_test_standardized_pi_list = [(pi - red_median_pi_val) / red_IQR if pi is not None else None for pi in red_test_pi_list]
+    # Calculate IQR and median of pixel values
+    IQR = np.percentile(concatenated_pi_list, 75) - np.percentile(concatenated_pi_list, 25)
+    median_pi_val = np.median(concatenated_pi_list)
 
-    green_train_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_train_pi_list]
-    green_vali_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_val_pi_list]
-    green_test_standardized_pi_list = [(pi - green_median_pi_val) / green_IQR if pi is not None else None for pi in green_test_pi_list]
+    # Initialize concatenated frames list for training
+    train_concatenated_frames_list = []
 
-    blue_train_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_train_pi_list]
-    blue_vali_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_val_pi_list]
-    blue_test_standardized_pi_list = [(pi - blue_median_pi_val) / blue_IQR if pi is not None else None for pi in blue_test_pi_list]
-    print("Done")
+    # Loop through frames, persistence images and labels within training dataset
+    for (frames, colour_channel_pis), label in train_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Initialize index to 0
+        index = 0
+
+        # Create variables for each list in colour channel persistence images list
+        red_pi_list = colour_channel_pis[0]
+        green_pi_list = colour_channel_pis[1]
+        blue_pi_list = colour_channel_pis[2]
+
+        # Loop through frames
+        for frame in frames:
+            
+            # Initialize list to hold standardized persistence images
+            channel_pis = []
+
+            # Loop through persistence images for each colour channel
+            for pi in [red_pi_list[index], green_pi_list[index], blue_pi_list[index]]:
+                
+                # If persistence image is "None," set to a tensor of desired shape filled with zeros
+                if pi is None:
+                    pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+
+                    # Add zeroed persistence image to list
+                    channel_pis.append(pi_tensor)
+
+                else:
+
+                    # Convert persistence image to numpy
+                    numpy_pi = pi.numpy()
+
+                    # Standardize persistence image
+                    standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+                    # Convert persistence image to a tensor
+                    pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+                    # Add frame to list
+                    channel_pis.append(pi_tensor)
+
+            # Concatenate video frame with persistence images from each colour channel
+            concatenated_frame = tf.concat([frame, channel_pis[0], channel_pis[1], channel_pis[2]], axis = -1)
+
+            # Append concatenated frame to concatenated frames list
+            concatenated_frames.append(concatenated_frame)
+
+            # Increment index by 1
+            index += 1
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        train_concatenated_frames_list.append((concatenated_frames_array, label))
+
+    # Initialize concatenated frames list for validation
+    val_concatenated_frames_list = []
+
+    # Loop through frames, persistence images and labels within validation dataset
+    for (frames, colour_channel_pis), label in val_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Initialize index to 0
+        index = 0
+
+        # Create variables for each list in colour channel persistence images list
+        red_pi_list = colour_channel_pis[0]
+        green_pi_list = colour_channel_pis[1]
+        blue_pi_list = colour_channel_pis[2]
+
+        # Loop through frames
+        for frame in frames:
+
+            # Initialize list to hold standardized persistence images
+            channel_pis = []
+
+            # Loop through persistence images for each colour channel
+            for pi in [red_pi_list[index], green_pi_list[index], blue_pi_list[index]]:
+                
+                # If persistence image is "None," set to a tensor of desired shape filled with zeros
+                if pi is None:
+                    pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+
+                    # Add zeroed persistence image to list
+                    channel_pis.append(pi_tensor)
+
+                else:
+
+                    # Convert persistence image to numpy
+                    numpy_pi = pi.numpy()
+
+                    # Standardize persistence image
+                    standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+                    # Convert persistence image to a tensor
+                    pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+                    # Add frame to list
+                    channel_pis.append(pi_tensor)
+
+            # Concatenate video frame with persistence images from each colour channel
+            concatenated_frame = tf.concat([frame, channel_pis[0], channel_pis[1], channel_pis[2]], axis = -1)
+
+            # Append concatenated frame to concatenated frames list
+            concatenated_frames.append(concatenated_frame)
+
+            # Increment index by 1
+            index += 1
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        val_concatenated_frames_list.append((concatenated_frames_array, label))
+
+    # Initialize concatenated frames list for testing
+    test_concatenated_frames_list = []
+
+    # Loop through frames, persistence images and labels within testing dataset
+    for (frames, colour_channel_pis), label in test_ds:
+
+        # Initialize concatenated frames list
+        concatenated_frames = []
+
+        # Initialize index to 0
+        index = 0
+
+        # Create variables for each list in colour channel persistence images list
+        red_pi_list = colour_channel_pis[0]
+        green_pi_list = colour_channel_pis[1]
+        blue_pi_list = colour_channel_pis[2]
+
+        # Loop through frames
+        for frame in frames:
+
+            # Initialize list to hold standardized persistence images
+            channel_pis = []
+
+            # Loop through persistence images for each colour channel
+            for pi in [red_pi_list[index], green_pi_list[index], blue_pi_list[index]]:
+                
+                # If persistence image is "None," set to a tensor of desired shape filled with zeros
+                if pi is None:
+                    pi_tensor = tf.zeros((height,width,1), dtype = tf.float32)
+
+                    # Add zeroed persistence image to list
+                    channel_pis.append(pi_tensor)
+
+                else:
+
+                    # Convert persistence image to numpy
+                    numpy_pi = pi.numpy()
+
+                    # Standardize persistence image
+                    standardized_pi = (numpy_pi - median_pi_val) / IQR
+
+                    # Convert persistence image to a tensor
+                    pi_tensor = tf.convert_to_tensor(standardized_pi, dtype = tf.float32)
+
+                    # Add frame to list
+                    channel_pis.append(pi_tensor)
+
+            # Concatenate video frame with persistence images from each colour channel
+            concatenated_frame = tf.concat([frame, channel_pis[0], channel_pis[1], channel_pis[2]], axis = -1)
+
+            # Append concatenated frame to concatenated frames list
+            concatenated_frames.append(concatenated_frame)
+
+            # Increment index by 1
+            index += 1
+
+        # Make concatenated frames list an array
+        concatenated_frames_array = np.array(concatenated_frames)
+
+        # Add concatenated frames array and its respective label to list
+        test_concatenated_frames_list.append((concatenated_frames_array, label))
 
     # Define output signature
     output_signature = (tf.TensorSpec(shape = (None, None, None, 6), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int16))
 
     # Generate training, validation, and testing datasets
-    train_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(train_ds, red_train_standardized_pi_list, 
-                                                            green_train_standardized_pi_list, blue_train_standardized_pi_list), output_signature = output_signature)
-    val_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(val_ds, red_vali_standardized_pi_list, 
-                                                            green_vali_standardized_pi_list, blue_vali_standardized_pi_list), output_signature = output_signature)
-    test_concatenated_frames = tf.data.Dataset.from_generator(Three_channel_concatenated_frame_generator(test_ds, red_test_standardized_pi_list, 
-                                                            green_test_standardized_pi_list, blue_test_standardized_pi_list), output_signature = output_signature)
+    train_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(train_concatenated_frames_list), output_signature = output_signature)
+    val_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(val_concatenated_frames_list), output_signature = output_signature)
+    test_concatenated_frames = tf.data.Dataset.from_generator(Concatenated_frame_generator(test_concatenated_frames_list), output_signature = output_signature)
     
     # Make versions of datasets that repeat for training
     repeat_train_concatenated_frames = train_concatenated_frames.repeat().batch(batch_size)
