@@ -6,7 +6,7 @@ Current tests implemented:
 
     - Concatenation based fusion with persistence images
     - Concatenation based fusion with one persistence image for each colour channel
-    - A multi-branch architecture separating raw video frames and persistence images which averages their predictions at the end of the model
+    - A multi-branch architecture separating video frames and their corresponding persistence images which concatenates their predictions at the end of the model
     - A multi-branch architecture that implements Convolutional Block Attention Module (CBAM)
 
 File by file expaination:
@@ -15,6 +15,10 @@ baseline_model.py:
 
     - Tests baseline 3D CNN video classification model
 
+pi_only.py:
+
+    - Inputs persistence images into the baseline 3D CNN to assess topological influence
+
 concatenation_fusion.py:
 
     - Extracts topological features from data
@@ -22,12 +26,12 @@ concatenation_fusion.py:
 
 multi_branch_fusion.py:
 
-    - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for raw image frames, and another for persistence images. These are evaluated by the model separately and then averaged to create a single output.
+    - Creates an alternate version of the baseline 3D CNN model that contains two branches. One for video frames, and another for persistence images. These are evaluated by the model separately and then concatenated to create a single output.
     - Contains a secondary test that uses Convolutional Block Attention Module (CBAM)
 
 utils.py:
 
-    Includes several helper functions which together can do the following:
+    Includes several helper functions which together do the following:
 
         - Load and preprocess video data
         - Implement baseline 3D CNN video classification model
@@ -49,4 +53,3 @@ CM_Test_Settings:
 Test_Results:
 
     - Folder to store all test result data
-
