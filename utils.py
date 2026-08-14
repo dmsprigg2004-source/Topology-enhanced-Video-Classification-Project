@@ -41,16 +41,17 @@ def get_test_settings():
     width = 112
     n_frames = 16
     batch_size = 8
+    dataset_split = "1"
 
     # Calculate steps per epoch and validation steps
     steps_per_epoch = (splits['train'] * num_categories) // batch_size
     validation_steps = (splits['val'] * num_categories) // batch_size
 
     # Return test settings
-    return num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps
+    return num_categories, splits, epochs, height, width, n_frames, batch_size, dataset_split, steps_per_epoch, validation_steps
 
 # Call above function to get test settings
-num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
+num_categories, splits, epochs, height, width, n_frames, batch_size, dataset_split, steps_per_epoch, validation_steps = get_test_settings()
 
 # Function that creates video splits for training, validation and testing
 def create_video_splits():
@@ -60,7 +61,7 @@ def create_video_splits():
     test_pool = {}
 
     # Open official dataset split .txt file for training
-    with open('ucfTrainTestlist/trainlist01.txt', 'r') as trainlist:
+    with open(f'ucfTrainTestlist/trainlist0{dataset_split}.txt', 'r') as trainlist:
 
         # Loop over lines in file
         for line in trainlist:
@@ -79,7 +80,7 @@ def create_video_splits():
                 train_pool[category] = [video]
 
     # Open official dataset split .txt file for testing
-    with open('ucfTrainTestlist/testlist01.txt', 'r') as testlist:
+    with open(f'ucfTrainTestlist/testlist0{dataset_split}.txt', 'r') as testlist:
 
         # Loop over lines in file
         for line in testlist:
@@ -97,22 +98,35 @@ def create_video_splits():
             else:
                 test_pool[category] = [video]
 
+    # Initialize dictionary and list
+    dataset_pool = {}
+    useable_categories = []
+
+    # Loop through training and testing videos
+    for (train_category, train_videos), (test_category, test_videos) in zip(train_pool.items(), test_pool.items()):
+
+        # If category has enough videos for training, validation and testing add to dictionary and list
+        if train_category == test_category and len(train_videos) >= splits["train"] + splits["val"] and len(test_videos) >= splits["test"]:
+            dataset_pool[train_category] = (train_videos, test_videos)
+            useable_categories.append(train_category)
+
+    # Create error message if available categories is less than requested number for testing
+    if len(useable_categories) < num_categories:
+        print("ERROR: NUMBER OF USEABLE CATEGORIES IS LESS THAN REQUESTED CATEGORIES. TRY REDUCING CATEGORY COUNT OR SPLIT SIZES")
+
     # Initialize split dictionaries
     train_split = {}
     val_split = {}
     test_split = {}
 
-    # Add videos names to training and validation splits
-    for category, videos in train_pool.items():
-        train_split[category] = videos[:splits["train"]]
-        val_split[category] = videos[splits["train"]:splits["train"] + splits["val"]]
+    # Add videos to training, validation and testing dictionaries
+    for category, (train_videos, test_videos) in dataset_pool.items():
+        train_split[category] = train_videos[:splits["train"]]
+        val_split[category] = train_videos[splits["train"]:splits["train"] + splits["val"]]
+        test_split[category] = test_videos[:splits["test"]]
 
-    # Add video names to testing split
-    for category, videos in test_pool.items():
-        test_split[category] = videos[:splits["test"]]
-    
-    # Return splits
-    return train_split, val_split, test_split
+    # Return splits and categories list
+    return train_split, val_split, test_split, useable_categories
 
 # Function to create a new subset directory
 def create_subset_dir(category_list, split, split_name):
@@ -150,12 +164,15 @@ def create_subset_dir(category_list, split, split_name):
 # Function that creates subset directories for training, validation and testing
 def create_subset_dirs(num_categories, UCF101_dir):
 
+    # Call function to get training, validation, and testing splits along with useable categories list
+    train_split, val_split, test_split, useable_categories = create_video_splits()
+
     # Initialize list and category count
     category_list = []
     category_count = 0
 
-    # Loop through categories in UCF101
-    for category in os.listdir(UCF101_dir):
+    # Loop through useable categories
+    for category in useable_categories:
 
         # Define path to category
         category_path = os.path.join(UCF101_dir, category)
@@ -173,9 +190,6 @@ def create_subset_dirs(num_categories, UCF101_dir):
 
     # Initialize dictionary
     subset_dirs = {}
-
-    # Call function to get training, validation, and testing splits
-    train_split, val_split, test_split = create_video_splits()
 
     # Create subset directories for training, validation, and testing
     train_dir = create_subset_dir(category_list, train_split, "train")
@@ -520,8 +534,8 @@ def plot_history(history):
 
     # Generate first subplot
     ax1.set_title('Loss')
-    ax1.plot(history.history['loss'], label = 'train')
-    ax1.plot(history.history['val_loss'], label = 'test')
+    ax1.plot(history.history['loss'], label = 'train', color= "black")
+    ax1.plot(history.history['val_loss'], label = 'test', color= "blue")
     ax1.set_ylabel('Loss')
     max_loss = max(history.history['loss'] + history.history['val_loss'])
     ax1.set_ylim([0, np.ceil(max_loss)])
@@ -530,8 +544,8 @@ def plot_history(history):
 
     # Generate second subplot
     ax2.set_title('Accuracy')
-    ax2.plot(history.history['accuracy'],  label = 'train')
-    ax2.plot(history.history['val_accuracy'], label = 'test')
+    ax2.plot(history.history['accuracy'],  label = 'train', color= "black")
+    ax2.plot(history.history['val_accuracy'], label = 'test', color= "blue")
     ax2.set_ylabel('Accuracy')
     ax2.set_ylim([0, 1])
     ax2.set_xlabel('Epoch')
