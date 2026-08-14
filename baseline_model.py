@@ -31,7 +31,7 @@ from utils import create_metrics_test_settings_spreadsheet
 from utils import save_results
 
 # Get test settings
-num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
+num_categories, splits, epochs, height, width, n_frames, batch_size, dataset_split, steps_per_epoch, validation_steps = get_test_settings()
 
 # Choose whether to save results to folder with specific name
 save_output = True

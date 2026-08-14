@@ -42,7 +42,7 @@ from concatenation_fusion import generate_st
 from concatenation_fusion import generate_persistence_image
 
 # Get test settings
-num_categories, splits, epochs, height, width, n_frames, batch_size, steps_per_epoch, validation_steps = get_test_settings()
+num_categories, splits, epochs, height, width, n_frames, batch_size, dataset_split, steps_per_epoch, validation_steps = get_test_settings()
 
 # Choose test from list
 tests = ["Baseline Multi-Branch", "Multi-Branch with CBAM"]
