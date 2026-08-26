@@ -344,11 +344,8 @@ def split_frames(frames):
     # Loop through individual frames
     for frame in frames:
 
-        # Convert to NumPy ndarray
-        np_frame = frame.numpy()
-
         # Rescale image
-        np_frame = (np_frame * 255).astype(np.uint8)
+        np_frame = (frame * 255).astype(np.uint8)
 
         # Split into colour channels
         r, g, b = cv2.split(np_frame)
